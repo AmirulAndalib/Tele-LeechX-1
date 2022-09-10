@@ -7,17 +7,16 @@
 # This is Part of < https://github.com/5MysterySD/Tele-LeechX >
 # All Right Reserved
 
-import requests
-import os
-import pkg_resources
-
+from requests import get as rget
+from os import path as opath, environ as env
+from pkg_resources import working_set
 from logging import FileHandler, StreamHandler, INFO, basicConfig, error as log_error, info as log_info
 from subprocess import run as srun, call as scall
 from dotenv import load_dotenv
 
 from tobrot import LOG_FILE_NAME
 
-if os.path.exists(LOG_FILE_NAME):
+if opath.exists(LOG_FILE_NAME):
     with open(LOG_FILE_NAME, 'r+') as f:
         f.truncate(0)
 
@@ -26,12 +25,12 @@ basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s [%(file
                     handlers=[FileHandler(LOG_FILE_NAME), StreamHandler()],
                     level=INFO)
 
-CONFIG_FILE_URL = os.environ.get('CONFIG_FILE_URL')
+CONFIG_FILE_URL = env.get('CONFIG_FILE_URL')
 try:
     if len(CONFIG_FILE_URL) == 0:
         raise TypeError
     try:
-        res = requests.get(CONFIG_FILE_URL)
+        res = rget(CONFIG_FILE_URL)
         if res.status_code == 200:
             with open('config.env', 'wb+') as f:
                 f.write(res.content)
@@ -45,13 +44,13 @@ except:
 load_dotenv('config.env', override=True)
 
 ## Update Packages ++++
-if os.environ.get('UPDATE_EVERYTHING_WHEN_RESTART', 'False').lower() == 'true':
-    packages = [dist.project_name for dist in pkg_resources.working_set]
+if env.get('UPDATE_EVERYTHING_WHEN_RESTART', 'False').lower() == 'true':
+    packages = [dist.project_name for dist in working_set]
     scall("pip install --upgrade " + ' '.join(packages), shell=True)
 ## Update Packages ----
 
-UPSTREAM_REPO = os.environ.get('UPSTREAM_REPO', "https://github.com/5MysterySD/Tele-LeechX")
-UPSTREAM_BRANCH = os.environ.get('UPSTREAM_BRANCH', "h-code")
+UPSTREAM_REPO = env.get('UPSTREAM_REPO', "https://github.com/5MysterySD/Tele-LeechX")
+UPSTREAM_BRANCH = env.get('UPSTREAM_BRANCH', "h-code")
 try:
     if len(UPSTREAM_REPO) == 0:
        raise TypeError
@@ -64,7 +63,7 @@ except:
     UPSTREAM_BRANCH = 'h-code'
 
 if UPSTREAM_REPO is not None:
-    if os.path.exists('.git'):
+    if opath.exists('.git'):
         srun(["rm", "-rf", ".git"])
         
     update = srun([f"git init -q \

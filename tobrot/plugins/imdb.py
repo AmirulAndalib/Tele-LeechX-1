@@ -7,11 +7,16 @@
 # This is Part of < https://github.com/5MysterySD/Tele-LeechX >
 # All Right Reserved
 
-import re
+from re import findall, IGNORECASE
 from imdb import IMDb
+from pycountry import countries as conn
 
+from tobrot import LOGGER
 from tobrot import app, MAX_LIST_ELM, DEF_IMDB_TEMPLATE,  LOGGER
+from tobrot.plugins import getUserOrChaDetails
 from tobrot.plugins.custom_utils import *
+from tobrot.helper_funcs.display_progress import TimeFormatter
+
 from pyrogram import filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery 
 from pyrogram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
@@ -22,7 +27,7 @@ async def imdb_search(client, message):
     if ' ' in message.text:
         k = await message.reply('<code>Searching IMDB ...</code>', parse_mode=enums.ParseMode.HTML)
         r, title = message.text.split(None, 1)
-        user_id_ = message.from_user.id
+        user_id_, _ = getUserOrChaDetails(message)
         if title.lower().startswith("tt"):
             movieid = title.replace("tt", "")
             movie = imdb.get_movie(movieid)
@@ -63,12 +68,12 @@ async def get_poster(query, bulk=False, id=False, file=None):
     if not id:
         query = (query.strip()).lower()
         title = query
-        year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
+        year = findall(r'[1-2]\d{3}$', query, IGNORECASE)
         if year:
             year = list_to_str(year[:1])
             title = (query.replace(year, "")).strip()
         elif file is not None:
-            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
+            year = findall(r'[1-2]\d{3}', file, IGNORECASE)
             if year:
                 year = list_to_str(year[:1]) 
         else:
@@ -106,8 +111,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
     else:
         plot = movie.get('plot outline')
     if plot and len(plot) > 800:
-        plot = plot[0:800] + "..."
-
+        plot = f"{plot[:800]}..."
     return {
         'title': movie.get('title'),
         'votes': movie.get('votes'),
@@ -118,8 +122,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'kind': movie.get("kind"),
         "imdb_id": f"tt{movie.get('imdbID')}",
         "cast": list_to_str(movie.get("cast")),
-        "runtime": list_to_str(movie.get("runtimes")),
-        "countries": list_to_hash(movie.get("countries")),
+        "runtime": list_to_str([TimeFormatter(int(run) * 60 * 1000) for run in movie.get("runtimes", "0")]),
+        "countries": list_to_hash(movie.get("countries"), True),
         "certificates": list_to_str(movie.get("certificates")),
         "languages": list_to_hash(movie.get("languages")),
         "director": list_to_str(movie.get("director")),
@@ -134,8 +138,10 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'genres': list_to_hash(movie.get("genres")),
         'poster': movie.get('full-size cover url'),
         'plot': plot,
-        'rating': str(movie.get("rating")),
-        'url':f'https://www.imdb.com/title/tt{movieid}'
+        'rating': str(movie.get("rating"))+" / 10",
+        'url':f'https://www.imdb.com/title/tt{movieid}',
+        'url_cast':f'https://www.imdb.com/title/tt{movieid}/fullcredits#cast',
+        'url_releaseinfo':f'https://www.imdb.com/title/tt{movieid}/releaseinfo',
     }
 
 def list_to_str(k):
@@ -145,46 +151,51 @@ def list_to_str(k):
         return str(k[0])
     elif MAX_LIST_ELM:
         k = k[:int(MAX_LIST_ELM)]
-        return ' '.join(f'{elem},' for elem in k)[:-1]
+        return ' '.join(f'{elem},' for elem in k)[:-1]+' ...'
     else:
         return ' '.join(f'{elem},' for elem in k)[:-1]
 
-def list_to_hash(k):
+def list_to_hash(k, flagg=False):
     listing = ""
     if not k:
         return ""
     elif len(k) == 1:
-        return str("#"+k[0].replace(" ", "_"))
+        if not flagg:
+            return str("#"+k[0].replace(" ", "_").replace("-", "_"))
+        try:
+            conflag = (conn.get(name=k[0])).flag
+            return str(f"{conflag} #" + k[0].replace(" ", "_").replace("-", "_"))
+        except AttributeError:
+            return str("#"+k[0].replace(" ", "_").replace("-", "_"))
     elif MAX_LIST_ELM:
         k = k[:int(MAX_LIST_ELM)]
         for elem in k:
-            elem = elem.replace(" ", "_")
-            listing += f'#{elem}, '
-        return listing[:-1]
+            ele = elem.replace(" ", "_").replace("-", "_")
+            if flagg:
+                try:
+                    conflag = (conn.get(name=elem)).flag
+                    listing += f'{conflag} '
+                except AttributeError:
+                    pass
+            listing += f'#{ele}, '
+        return f'{listing[:-2]} ...'
     else:
         for elem in k:
-            elem = elem.replace(" ", "_")
-            listing += f'#{elem}, '
-        return listing[:-1]
+            ele = elem.replace(" ", "_").replace("-", "_")
+            if flagg:
+                conflag = (conn.get(name=elem)).flag
+                listing += f'{conflag} '
+            listing += f'#{ele}, '
+        return listing[:-2]
 
-@app.on_callback_query(filters.regex('^imdb'))
 async def imdb_callback(bot, quer_y: CallbackQuery):
-    i, movie, from_user = quer_y.data.split('#')
+    splitData = quer_y.data.split('#')
+    movie, from_user = splitData[1], splitData[2]
     imdb = await get_poster(query=movie, id=True)
-    btn = [
-            [
-                InlineKeyboardButton(
-                    text=f"⚡ 𝘊𝘭𝘪𝘤𝘬 𝘏𝘦𝘳𝘦 ⚡",
-                    url=imdb['url'],
-                )
-            ]
-        ]
+    btn = [[InlineKeyboardButton(text="⚡ 𝘊𝘭𝘪𝘤𝘬 𝘏𝘦𝘳𝘦 ⚡", url=imdb['url'])]]
     message = quer_y.message.reply_to_message or quer_y.message
-    template = IMDB_TEMPLATE.get(from_user, "")
-    LOGGER.info(IMDB_TEMPLATE)
-    LOGGER.info(from_user)
-    LOGGER.info(template)
-    if template == "":
+    template = IMDB_TEMPLATE.get(int(from_user), "")
+    if not template:
         template = DEF_IMDB_TEMPLATE
     if imdb and template != "":
         caption = template.format(
@@ -216,6 +227,8 @@ async def imdb_callback(bot, quer_y: CallbackQuery):
             plot = imdb['plot'],
             rating = imdb['rating'],
             url = imdb['url'],
+            url_cast = imdb['url_cast'],
+            url_releaseinfo = imdb['url_releaseinfo'],
             **locals()
         )
     else:

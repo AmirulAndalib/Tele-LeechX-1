@@ -9,14 +9,16 @@
 
 
 from speedtest import Speedtest
-import logging
-from tobrot.helper_funcs.display_progress import humanbytes
 from pyrogram import enums
 
-torlog = logging.getLogger(__name__)
+from tobrot import LOGGER
+from tobrot.bot_theme.themes import BotTheme
+from tobrot.plugins import getUserOrChaDetails
+from tobrot.helper_funcs.display_progress import humanbytes
 
 async def get_speed(self, message):
     imspd = await message.reply("`Running Speed Test...`")
+    user_id, _ = getUserOrChaDetails(message)
     test = Speedtest()
     test.get_best_server()
     test.download()
@@ -24,20 +26,30 @@ async def get_speed(self, message):
     test.results.share()
     result = test.results.dict()
     path = (result['share'])
-    string_speed = f'''
-<code>🌐 Server :</code>
-╠ <b>Name:</b> <code>{result['server']['name']}</code>
-╠ <b>Country:</b> <code>{result['server']['country']}, {result['server']['cc']}</code>
-╠ <b>Sponsor:</b> <code>{result['server']['sponsor']}</code>
-╚ <b>ISP:</b> <code>{result['client']['isp']}</code>
-
-<code>🧭 SpeedTest Results :</code>
-╠ <b>Upload:</b> <code>{humanbytes(result['upload'] / 8)}</code>
-╠ <b>Download:</b>  <code>{humanbytes(result['download'] / 8)}</code>
-╠ <b>Ping:</b> <code>{result['ping']} ms</code>
-╚ <b>ISP Rating:</b> <code>{result['client']['isprating']}</code>
-'''
+    string_speed = ((BotTheme(user_id)).SPEEDTEST_MSG).format(
+        upload = humanbytes(result['upload'] / 8),
+        download = humanbytes(result['download'] / 8),
+        ping = result['ping'],
+        timestamp = result['timestamp'],
+        bytes_sent = humanbytes(result['bytes_sent']),
+        bytes_received = humanbytes(result['bytes_received']),
+        name = result['server']['name'],
+        country = result['server']['country'],
+        cc = result['server']['cc'],
+        sponsor = result['server']['sponsor'],
+        latency = result['server']['latency'],
+        serverlat = result['server']['lat'],
+        serverlon = result['server']['lon'],
+        ip = result['client']['ip'],
+        clientlat = result['client']['lat'],
+        clientlon = result['client']['lon'],
+        clicountry = result['client']['country'],
+        isp = result['client']['isp'],
+        isprating = result['client']['isprating']
+    )
     await imspd.delete()
-    await message.reply(string_speed, parse_mode=enums.ParseMode.HTML)
-    torlog.info(f'Server Speed result:-\nDL: {humanbytes(result["download"] / 8)}/s UL: {humanbytes(result["upload"] / 8)}/s')
-
+    try:
+        await message.reply_photo(path, caption=string_speed, parse_mode=enums.ParseMode.HTML)
+    except:
+        await message.reply(string_speed, parse_mode=enums.ParseMode.HTML)
+    LOGGER.info(f'Server Speed result:-\nDL: {humanbytes(result["download"] / 8)}/s UL: {humanbytes(result["upload"] / 8)}/s')

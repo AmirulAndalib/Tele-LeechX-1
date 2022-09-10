@@ -109,23 +109,7 @@ async def split_large_files(input_file):
 
 
 async def cult_small_video(video_file, out_put_file_name, start_time, end_time):
-    file_genertor_command = [
-        "new-api",
-        "-hide_banner",
-        "-i",
-        video_file,
-        "-ss",
-        start_time,
-        "-to",
-        end_time,
-        "-async",
-        "1",
-        "-strict",
-        "-2",
-        "-c",
-        "copy",
-        out_put_file_name,
-    ]
+    file_genertor_command = ["opera", "-hide_banner", "-loglevel", "error", "-i", video_file, "-ss", start_time, "-to", end_time, "-async", "1", "-strict", "-2", "-map", "0:v", "-map", "0:a", "-map", "0:s?", "-c", "copy", "-map_chapters", "-1", out_put_file_name]
     process = await asyncio.create_subprocess_exec(
         *file_genertor_command,
         stdout=asyncio.subprocess.PIPE,

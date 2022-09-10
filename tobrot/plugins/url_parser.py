@@ -11,20 +11,16 @@ import datetime
 
 from tobrot import LOGGER
 from tobrot.helper_funcs.display_progress import humanbytes, TimeFormatter
-from tobrot.plugins import is_appdrive_link, is_gdtot_link, is_hubdrive_link 
+from tobrot.plugins import is_appdrive_link, is_gdtot_link, is_hubdrive_link, getUserOrChaDetails
 from tobrot.helper_funcs.direct_link_generator import url_link_generate, gdtot, appdrive_dl, hubdrive 
 from tobrot.helper_funcs.exceptions import DirectDownloadLinkException
 
 drive_list = ['driveapp.in', 'gdflix.pro', 'drivelinks.in', 'drivesharer.in', 'driveflix.in', 'drivebit.in', 'drivehub.in', 'driveace.in']
 
 async def url_parser(client, message):
-   
-    op = await message.reply_text(
-        text="`Fetching Data . . .`",
-        quote=True,
-    )
-    user_id = message.from_user.id 
-    u_men = message.from_user.mention
+
+    op = await message.reply_text("`Fetching Data . . .`")
+    user_id, u_men = getUserOrChaDetails(message)
     url_parse = message.text.split(" ", maxsplit=1)
     reply_to = message.reply_to_message
     if len(url_parse) > 1:
@@ -65,7 +61,7 @@ async def url_parser(client, message):
 
 
 async def bypass_link(text_url: str):
-    
+
     if "zippyshare.com" in text_url \
         or "osdn.net" in text_url \
         or "mediafire.com" in text_url \
@@ -119,11 +115,11 @@ async def bypass_link(text_url: str):
         or "corneey.com" in text_url \
         or "sh.st" in text_url \
         or "racaty.net" in text_url:
-            try:
-                url_string = url_link_generate(text_url)
-                return False, url_string
-            except DirectDownloadLinkException as e:
-                LOGGER.info(f'{text_url}: {e}')
+        try:
+            url_string = url_link_generate(text_url)
+            return False, url_string
+        except DirectDownloadLinkException as e:
+            LOGGER.info(f'{text_url}: {e}')
     elif is_hubdrive_link(text_url):
         try:
             info_parsed = hubdrive(text_url)
@@ -134,10 +130,16 @@ async def bypass_link(text_url: str):
     elif is_gdtot_link(text_url):
         try:
             info_parsed = gdtot(text_url)
-            url_string = f"📨 **Name** : `{info_parsed['title']}` \n📁 **File Size** : `{info_parsed['size']}` \n📆 **Date** : `{info_parsed['date']}` \n☁️ **GDrive URL** : `{info_parsed['gdrive_link']}`"
+            url_string = (
+                f"📨 **Name** : `{info_parsed['title']}` \n📁 **File Size** : `{info_parsed['size']}` \n📆 **Date** : `{info_parsed['date']}` \n☁️ **GDrive URL** : `{info_parsed['gdrive_link']}`"
+                if info_parsed['gdrive_link']
+                else f"⛔ **Parsing Error** ⛔ : \n `{info_parsed['message']}`"
+            )
+
             return False, url_string
         except DirectDownloadLinkException as e:
             LOGGER.info(f'{text_url}: {e}')
+            return False, e
     elif is_appdrive_link(text_url) or any(x in text_url for x in drive_list):
         try:
             is_direct = False
@@ -175,6 +177,7 @@ async def bypass_link(text_url: str):
             return False, url_string
         except DirectDownloadLinkException as er:
             LOGGER.info(f'{text_url}: {er}')
+            return False, er
     else:
         return True, None
 

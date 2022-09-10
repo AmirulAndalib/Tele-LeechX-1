@@ -13,15 +13,15 @@ from pyrogram import enums
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from tobrot import LOGGER, OWNER_ID
-
+from tobrot.plugins import getUserOrChaDetails
 
 async def rclone_command_f(client, message):
     # This is code to switch which rclone config section to use. This setting affects the entire bot
     #(And at this time, the cloneHelper only support gdrive, so you should only choose to use gdrive config section)
     """/rclone command"""
-
-    LOGGER.info(f"[RCLONE] Init Chat ID : {message.chat.id}, User ID : {message.from_user.id}")
-    if message.from_user.id == OWNER_ID and message.chat.type == enums.ChatType.PRIVATE:
+    usr_id, _ = getUserOrChaDetails(message)
+    LOGGER.info(f"[RCLONE] Init Chat ID : {message.chat.id}, User ID : {usr_id}")
+    if usr_id == OWNER_ID and message.chat.type == enums.ChatType.PRIVATE:
         config = ConfigParser()
         config.read("rclone_bak.conf")
         sections = list(config.sections())
@@ -37,9 +37,12 @@ async def rclone_command_f(client, message):
         msg_text = f"""Default section of rclone config is: **{section}**\n\n
 There are {len(sections)} sections in your rclone.conf file, 
 please choose which section you want to use:"""
-        ikeyboard = [InlineKeyboardButton(
-                "‼️ Cancel ‼️", callback_data=(f"rcloneCancel").encode("UTF-8")
-            )]
+        ikeyboard = [
+            InlineKeyboardButton(
+                "‼️ Cancel ‼️", callback_data="rcloneCancel".encode("UTF-8")
+            )
+        ]
+
         inline_keyboard.append(ikeyboard)
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
         await message.reply_text(text=msg_text, reply_markup=reply_markup)
@@ -48,7 +51,7 @@ please choose which section you want to use:"""
             await message.delete()
         except:
             pass
-        LOGGER.warning(f"User ID = {message.from_user.id} have no permission to edit rclone config!")
+        LOGGER.warning(f"User ID = {usr_id} have no permission to edit rclone config!")
 
 
 async def rclone_button_callback(bot, update: CallbackQuery):

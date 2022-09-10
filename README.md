@@ -1,3 +1,7 @@
+```diff
+- Repo Dead, Bye Enjoy your Life !!
+```
+
 <kbd>
   <a href="https://t.me/FXTorrentz"><img src="https://te.legra.ph/file/c569246c04ae797c66822.jpg"></a>
 </kbd>
@@ -36,17 +40,16 @@ A `Telegram Leech Bot` Upto 4GB Uploading With Premium Telegram Account and Mode
 
 ## Deploy Guide 🛃
 
-#### Heroku ⚕️
+#### 1. Heroku ⚕️
 
-* Go to [`Heroku Branch`](https://github.com/5MysterySD/Tele-LeechX/tree/heroku) .
+- Go to [`Heroku Branch`](https://github.com/5MysterySD/Tele-LeechX/tree/heroku) .
 
 ----
 
 ## Full Documentation 🗂
 
-* Check **Full Documentation** and `README.md` :
-
-> [![](https://img.shields.io/badge/Doc%20Website-Check-ffb9b4?style=flat&logo=devdotto&style=flat&labelColor=292c3b)](https://5mysterysd.github.io/categories/tele-leechx/)
+* Check **Full Documentation**:
+  > [![](https://img.shields.io/badge/Doc%20Website-Check-ffb9b4?style=flat&logo=devdotto&style=flat&labelColor=292c3b)](https://5mysterysd.github.io/categories/tele-leechx/)
 
 ---
 
@@ -83,7 +86,7 @@ I will be very Obliged if, you help in Bug Fixing, Features Adding, and More  . 
 
  **STEPS TO HELP or CONTRIBUTE** :
 1. Fork the Repo 🍴
->  Don't Clone or Import, Repo has Bugs to Fix, After All Your Wish
+    >  Don't Clone or Import, Repo has Bugs to Fix, After All Your Wish
 2. Make Only These Changes and Pull Request to the Main Repo !! 🛃
 3. After Review, I will Push the Commit !!
 

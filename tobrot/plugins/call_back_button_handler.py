@@ -9,28 +9,29 @@
 
 
 import os
-import shutil
-
+from asyncio import sleep as asleep
+from shutil import rmtree
 from pyrogram import enums
 from pyrogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton 
+
 from tobrot import *
 from tobrot.helper_funcs.bot_commands import BotCommands
 from tobrot.helper_funcs.admin_check import AdminCheck
 from tobrot.helper_funcs.download_aria_p_n import aria_start
 from tobrot.helper_funcs.youtube_dl_button import youtube_dl_call_back
-from tobrot.plugins.choose_rclone_config import rclone_button_callback
-
+from tobrot.plugins.choose_rclone_config import rclone_button_callback 
+from tobrot.plugins.status_message_fn import bot_button_stats
 
 async def button(bot, update: CallbackQuery):
     cb_data = update.data
     try:
-        g = await AdminCheck(bot, update.message.chat.id, update.from_user.id)
-    except Exception as ee:
-        LOGGER.info(ee)
+        isAdmin = await AdminCheck(bot, update.message.chat.id, update.from_user.id)
+    except Exception as err:
+        LOGGER.info(err)
     if cb_data.startswith("gUPcancel"):
         cmf = cb_data.split("/")
         chat_id, mes_id, from_usr = cmf[1], cmf[2], cmf[3]
-        if (int(update.from_user.id) == int(from_usr)) or g:
+        if (int(update.from_user.id) == int(from_usr)) or isAdmin:
             await bot.answer_callback_query(
                 update.id, text="Going to Cancel . . . 🛠", show_alert=False
             )
@@ -55,7 +56,6 @@ async def button(bot, update: CallbackQuery):
         )
         await rclone_button_callback(bot, update)
         return
-    # todo - remove this code if not needed in future
     if cb_data.startswith("cancel"):
         if (update.from_user.id == update.message.reply_to_message.from_user.id) or g:
             await bot.answer_callback_query(
@@ -78,7 +78,7 @@ async def button(bot, update: CallbackQuery):
                     )
                     if os.path.exists(file_name):
                         if os.path.isdir(file_name):
-                            shutil.rmtree(file_name)
+                            rmtree(file_name)
                         else:
                             os.remove(file_name)
                     await i_m_s_e_g.edit_text(
@@ -135,7 +135,7 @@ async def button(bot, update: CallbackQuery):
                     if os.path.isfile(f):
                         os.remove(f)
                     else:
-                        shutil.rmtree(f)
+                        rmtree(f)
                 await update.message.edit_text(f"<code>🔃 Deleted {len(g_del_list)} Objects 🚮</code>")
             else:
                 await update.message.edit_text("<i>⛔ Nothing to clear ⛔ \nAs Per I Get to Know !! </i>")
@@ -265,7 +265,7 @@ async def button(bot, update: CallbackQuery):
 <i>&gt; </i><i>zippyshare.com</i><i>, </i><i>letsupload.io</i><i>, </i><i>hxfile.co</i><i>, </i><i>anonfiles.com</i><i>, </i><i>bayfiles.com</i><i>, antfiles, </i><i>fembed.com</i><i>, </i><i>fembed.net</i><i>, </i><i>femax20.com</i><i>, </i><i>layarkacaxxi.icu</i><i>, </i><i>fcdn.stream</i><i>, </i><i>sbplay.org</i><i>, </i><i>naniplay.com</i><i>, </i><i>naniplay.nanime.in</i><i>, </i><i>naniplay.nanime.biz</i><i>, </i><i>sbembed.com</i><i>, </i><i>streamtape.com</i><i>, </i><i>streamsb.net</i><i>, </i><i>feurl.com</i><i>, </i><i>pixeldrain.com</i><i>, </i><i>racaty.net</i><i>, </i><i>1fichier.com</i><i>, </i><i>solidfiles.com</i><i>, </i><i>gplinks.co</i><i>, </i><i>appdrive.in</i> <b><i>( Other Available in </i></b><b><i>/parser</i></b> <b><i>)</i>
 </b>
 • 𝐔𝐬𝐚𝐠𝐞:
-□ <b>Send Direct Link Along with Command :</b>
+□ <b><u>Send Direct Link Along with Command :</u></b>
 /leech(BotName) <code>{link}</code>
 
 □ <b><u>Reply to a Direct Download Link / Torrent File / Magnet Link :</u></b>
@@ -284,6 +284,51 @@ async def button(bot, update: CallbackQuery):
             await update.message.reply_to_message.delete()
         except:
             pass
+    elif cb_data == "admin_close":
+        isAdmin = await AdminCheck(bot, update.message.chat.id, update.from_user.id)
+        if isAdmin:
+            await bot.answer_callback_query(
+                update.id, text="Closing . . . ⛔️", show_alert=False
+            )
+            await update.message.delete()
+        else:
+            await bot.answer_callback_query(
+                callback_query_id=update.id,
+                text="⚠️ Only for Group Admins ⚠️",
+                show_alert=True,
+                cache_time=0,
+            )
+    elif cb_data == "stats":
+        status_stats = bot_button_stats()
+        await bot.answer_callback_query(
+            callback_query_id=update.id,
+            text=status_stats,
+            show_alert=True,
+            cache_time=0,
+        )
+    elif cb_data.startswith("refresh"):
+        u_men = cb_data.split(" ")[1]
+        status_txt = update.message.text
+        await update.message.edit_message_text(text=f"{u_men} Refreshing Status...⏳")
+        asleep(5)
+        #await update.message.edit_message_text(text=f"{status_txt}")
+    elif cb_data.startswith("theme"):
+        splitTheme = cb_data.split(" ")
+        uid, user_theme = splitTheme[1], splitTheme[2]
+        if int(update.from_user.id) == int(uid):
+            USER_THEMES[uid] = user_theme
+            await update.message.edit_text(
+                text = "Your Custom Theme Saved Successfully ✅️",
+                disable_web_page_preview = True, 
+                parse_mode=enums.ParseMode.HTML
+            )
+        else:
+            await bot.answer_callback_query(
+                callback_query_id=update.id,
+                text="Not Yours !!",
+                show_alert=True,
+                cache_time=0,
+            )
 
     '''
     elif cb_data == "":

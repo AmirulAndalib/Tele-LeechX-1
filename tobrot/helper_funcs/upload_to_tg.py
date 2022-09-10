@@ -7,19 +7,16 @@
 # This is Part of < https://github.com/5MysterySD/Tele-LeechX >
 # All Right Reserved
 
-
-import asyncio
-import os
-import re
-import shutil
-import time
+import sys, errno
+from asyncio import sleep as asleep, subprocess, create_subprocess_exec
+from os import path as opath, listdir, remove as oremove
+from re import escape as rescape, findall
+from shutil import rmtree
+from time import time, sleep as tsleep
 from functools import partial
 from pathlib import Path
+from requests import utils, get as rget
 
-import pyrogram.types as pyrogram
-import requests
-
-from telegram import ParseMode
 from pyrogram import enums
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
@@ -27,30 +24,13 @@ from hurry.filesize import size
 from PIL import Image
 from pyrogram.errors import FloodWait, MessageNotModified
 from pyrogram.types import InputMediaAudio, InputMediaDocument, InputMediaVideo
-from tobrot import (
-    DESTINATION_FOLDER,
-    DOWNLOAD_LOCATION,
-    EDIT_SLEEP_TIME_OUT,
-    INDEX_LINK,
-    LOGGER,
-    TG_MAX_FILE_SIZE,
-    UPLOAD_AS_DOC,
-    CAP_STYLE,
-    CUSTOM_CAPTION,
-    user_specific_config,
-    bot,
-    LEECH_LOG,
-    EXCEP_CHATS,
-    EX_LEECH_LOG,
-    BOT_PM,
-    TG_PRM_FILE_SIZE,
-    PRM_USERS,
-    PRM_LOG,
-    isUserPremium, 
-    AUTH_CHANNEL
-)
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from tobrot import DESTINATION_FOLDER, DOWNLOAD_LOCATION, EDIT_SLEEP_TIME_OUT, INDEX_LINK, VIEW_LINK, LOGGER, TG_MAX_FILE_SIZE, UPLOAD_AS_DOC, \
+                   CAP_STYLE, CUSTOM_CAPTION, user_specific_config, bot, LEECH_LOG, EXCEP_CHATS, EX_LEECH_LOG, BOT_PM, TG_PRM_FILE_SIZE, PRM_USERS, PRM_LOG, isUserPremium, AUTH_CHANNEL, UPDATES_CHANNEL
 if isUserPremium:
     from tobrot import userBot
+from tobrot.bot_theme.themes import BotTheme
 from tobrot.helper_funcs.help_Nekmo_ffmpeg import copy_file
 from tobrot.helper_funcs.display_progress import humanbytes, Progress
 from tobrot.helper_funcs.help_Nekmo_ffmpeg import take_screen_shot
@@ -58,10 +38,10 @@ from tobrot.helper_funcs.split_large_files import split_large_files
 from tobrot.plugins.custom_utils import *
 
 def getFolderSize(p):
-    prepend = partial(os.path.join, p)
+    prepend = partial(opath.join, p)
     return sum(
-        os.path.getsize(f) if os.path.isfile(f) else getFolderSize(f)
-        for f in map(prepend, os.listdir(p))
+        opath.getsize(f) if opath.isfile(f) else getFolderSize(f)
+        for f in map(prepend, listdir(p))
     )
 
 async def upload_to_tg(
@@ -73,8 +53,8 @@ async def upload_to_tg(
     edit_media=False,
     yt_thumb=None,
 ):
-    base_file_name = os.path.basename(local_file_name)
-    file_size = os.path.getsize(local_file_name)
+    base_file_name = opath.basename(local_file_name)
+    file_size = opath.getsize(local_file_name)
 
     caption_str = ""
     DEF_CAPTION_MSG = f"<{CAP_STYLE}>{base_file_name}</{CAP_STYLE}>"
@@ -100,20 +80,21 @@ async def upload_to_tg(
         caption_str = DEF_CAPTION_MSG
 
     IS_RETRT = bool(PRM_USERS and str(from_user) not in str(PRM_USERS))
-    if os.path.isdir(local_file_name):
-        directory_contents = os.listdir(local_file_name)
+    if opath.isdir(local_file_name):
+        directory_contents = listdir(local_file_name)
         directory_contents.sort()
         LOGGER.info(directory_contents)
         new_m_esg = message
         if not message.photo:
-            new_m_esg = await message.reply_text(
-                f"<b><i>🛠 Extracting : </i></b> <code>{len(directory_contents)}</code> <b>File(s)</b>",
+            new_m_esg = await message.reply_text(((BotTheme(from_user)).EXTRACT_MSG).format(
+                    no_of_con = len(directory_contents)
+                ),
                 quote=True
             )
         for single_file in directory_contents:
             await upload_to_tg(
                 new_m_esg,
-                os.path.join(local_file_name, single_file),
+                opath.join(local_file_name, single_file),
                 from_user,
                 dict_contatining_uploaded_files,
                 client,
@@ -121,7 +102,7 @@ async def upload_to_tg(
                 yt_thumb,
             )
     else:
-        sizze = os.path.getsize(local_file_name)
+        sizze = opath.getsize(local_file_name)
         if sizze > TG_MAX_FILE_SIZE and sizze < TG_PRM_FILE_SIZE and isUserPremium and (not IS_RETRT):
             LOGGER.info(f"User Type : Premium ({from_user})")
             sent_message, idCheck = await upload_single_file(
@@ -138,25 +119,25 @@ async def upload_to_tg(
                 return
             if idCheck:
                 dict_contatining_uploaded_files[
-                    os.path.basename(local_file_name)
+                    opath.basename(local_file_name)
                 ] = sent_message.message_id
             else:
                 dict_contatining_uploaded_files[
-                    os.path.basename(local_file_name)
+                    opath.basename(local_file_name)
                 ] = sent_message.id
-        elif os.path.getsize(local_file_name) > TG_MAX_FILE_SIZE:
+        elif opath.getsize(local_file_name) > TG_MAX_FILE_SIZE:
             LOGGER.info(f"User Type : Non Premium ({from_user})")
             i_m_s_g = await message.reply_text(
                 "<b><i>📑Telegram doesn't Support Uploading this File.</i></b>\n"
-                f"<b><i>🎯Detected File Size: {humanbytes(os.path.getsize(local_file_name))} </i></b>\n"
+                f"<b><i>🎯Detected File Size: {humanbytes(opath.getsize(local_file_name))} </i></b>\n"
                 "\n<code>🗃 Trying to split the files . . .</code>"
             )
             splitted_dir = await split_large_files(local_file_name)
-            totlaa_sleif = os.listdir(splitted_dir)
+            totlaa_sleif = listdir(splitted_dir)
             totlaa_sleif.sort()
             number_of_files = len(totlaa_sleif)
             LOGGER.info(totlaa_sleif)
-            ba_se_file_name = os.path.basename(local_file_name)
+            ba_se_file_name = opath.basename(local_file_name)
             await i_m_s_g.edit_text(
                 f"<b><i>📨 Detected File Size: {humanbytes(sizze)}</i></b> \n"
                 f"📬<code>{ba_se_file_name}</code><i><b> splitted into {number_of_files} Files🗃.</b></i>\n"
@@ -165,7 +146,7 @@ async def upload_to_tg(
             for le_file in totlaa_sleif:
                 await upload_to_tg(
                     message,
-                    os.path.join(splitted_dir, le_file),
+                    opath.join(splitted_dir, le_file),
                     from_user,
                     dict_contatining_uploaded_files,
                     client,
@@ -173,7 +154,7 @@ async def upload_to_tg(
                     yt_thumb,
                 )
         else:
-            sizze = os.path.getsize(local_file_name)
+            sizze = opath.getsize(local_file_name)
             LOGGER.info("Files Less Than 2 GB")
             sent_message, _ = await upload_single_file(
                 message,
@@ -187,7 +168,7 @@ async def upload_to_tg(
             )
             if sent_message is not None:
                 dict_contatining_uploaded_files[
-                    os.path.basename(local_file_name)
+                    opath.basename(local_file_name)
                 ] = sent_message.id
             else:
                 return
@@ -195,91 +176,79 @@ async def upload_to_tg(
     return dict_contatining_uploaded_files
 
 
-# © gautamajay52 thanks to Rclone team for this wonderful tool.🧘
-
+# © gautamajay52 | RClone.org
 async def upload_to_gdrive(file_upload, message, messa_ge, g_id):
-    await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+    await asleep(EDIT_SLEEP_TIME_OUT)
     del_it = await message.edit_text(
-        f"<a href='tg://user?id={g_id}'>🔊</a> Now Uploading to ☁️ Cloud!!!"
+        f"┏⚡️ <i>RClone Initiated</i> ⚡️\n┃\n┗📈 𝐒𝐭𝐚𝐭𝐮𝐬: <b><i>Uploading to Cloud...☁️</i></b>"
     )
-    if os.path.exists("rclone.conf"):
+    if opath.exists("rclone.conf"):
         with open("rclone.conf", "r+") as file:
             con = file.read()
-            gUP = re.findall(r"\[(.*)\]", con)[0]
+            gUP = findall(r"\[(.*)\]", con)[0]
             LOGGER.info(gUP)
-    destination = f"{DESTINATION_FOLDER}"
+    destination = str(DESTINATION_FOLDER)
     file_upload = str(Path(file_upload).resolve())
     LOGGER.info(file_upload)
-    if os.path.isfile(file_upload):
-        g_au = [
-            "rclone",
-            "copy",
-            "--config=rclone.conf",
-            f"{file_upload}",
-            f"{gUP}:{destination}",
-            "-v",
-        ]
+    if opath.isfile(file_upload):
+        g_au = ["rclone", "copy", "--config=rclone.conf", f"{file_upload}", f"{gUP}:{destination}", "-v"]
         LOGGER.info(g_au)
-        tmp = await asyncio.create_subprocess_exec(
-            *g_au, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        tmp = await create_subprocess_exec(
+            *g_au, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         pro, cess = await tmp.communicate()
         LOGGER.info(pro.decode("utf-8"))
         LOGGER.info(cess.decode("utf-8"))
-        gk_file = re.escape(os.path.basename(file_upload))
+        gk_file = rescape(opath.basename(file_upload))
         LOGGER.info(gk_file)
         with open("filter.txt", "w+", encoding="utf-8") as filter:
             print(f"+ {gk_file}\n- *", file=filter)
 
-        t_a_m = [
-            "rclone",
-            "lsf",
-            "--config=rclone.conf",
-            "-F",
-            "i",
-            "--filter-from=filter.txt",
-            "--files-only",
-            f"{gUP}:{destination}",
-        ]
-        gau_tam = await asyncio.create_subprocess_exec(
-            *t_a_m, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        cmd = ["rclone", "lsf", "--config=rclone.conf", "-F", "i", "--filter-from=filter.txt", "--files-only", f"{gUP}:{destination}"]
+        checkResults = await create_subprocess_exec(
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        # os.remove("filter.txt")
-        gau, tam = await gau_tam.communicate()
+        # oremove("filter.txt")
+        gau, tam = await checkResults.communicate()
         gautam = gau.decode().strip()
         LOGGER.info(gau.decode())
         LOGGER.info(tam.decode())
-        # os.remove("filter.txt")
-        gauti = f"https://drive.google.com/file/d/{gautam}/view?usp=drivesdk"
-        gjay = size(os.path.getsize(file_upload))
+        # oremove("filter.txt")
+        gURL = f"https://drive.google.com/file/d/{gautam}/view?usp=drivesdk"
+        gjay = size(opath.getsize(file_upload))
         button = [
             [
-                pyrogram.InlineKeyboardButton(
-                    text="☁️ CloudUrl ☁️", url=f"{gauti}"
-                )
+                InlineKeyboardButton(text="☁️ GDrive Link ☁️", url=f"{gURL}")
             ]
         ]
-
+        fileURL = opath.basename(file_upload)
         if INDEX_LINK:
-            indexurl = f"{INDEX_LINK}/{os.path.basename(file_upload)}"
-            tam_link = requests.utils.requote_uri(indexurl)
-            LOGGER.info(tam_link)
-            button.append(
-                [
-                    pyrogram.InlineKeyboardButton(
-                        text="ℹ️ IndexUrl ℹ️", url=f"{tam_link}"
-                    )
-                ]
-            )
-        button_markup = pyrogram.InlineKeyboardMarkup(button)
-        await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+            _idno = 1
+            INDEXS = INDEX_LINK.split(" ")
+            for index in INDEXS:
+                indexurl = f"{index}/{fileURL}"
+                tam_link = utils.requote_uri(indexurl)
+                LOGGER.info(f'Index Link #{_idno} : {tam_link}')
+                if VIEW_LINK and (not indexurl.endswith('/')):
+                    view_link_ = f"{tam_link}?a=view"
+                    button.append([
+                        InlineKeyboardButton(text=f"⚡️ Index Link #{_idno}⚡️", url=f"{tam_link}"),
+                        InlineKeyboardButton(text=f"🌐 View Link #{_idno}", url=f"{view_link_}")
+                    ])
+                else:
+                    button.append([
+                        InlineKeyboardButton(text=f"⚡️ Index Link #{_idno}⚡️", url=f"{tam_link}")
+                    ])
+                _idno += 1
+        button_markup = InlineKeyboardMarkup(button)
+        await asleep(EDIT_SLEEP_TIME_OUT)
         await messa_ge.reply_text(
-            f"🤖: Uploaded successfully `{os.path.basename(file_upload)}` <a href='tg://user?id={g_id}'>🤒</a>\n📀 Size: {gjay}",
+            f"📨 **Name** : `{fileURL}`\n\n📊 **Total Size** : `{gjay}B`\n\n👤 **Req By:** {messa_ge.from_user.mention} ( #ID{messa_ge.from_user.id} )",
             reply_markup=button_markup,
         )
-        os.remove(file_upload)
+        oremove(file_upload)
     else:
-        tt = os.path.join(destination, os.path.basename(file_upload))
+        tt = opath.join(destination, opath.basename(file_upload))
         LOGGER.info(tt)
         t_am = [
             "rclone",
@@ -290,13 +259,13 @@ async def upload_to_gdrive(file_upload, message, messa_ge, g_id):
             "-v",
         ]
         LOGGER.info(t_am)
-        tmp = await asyncio.create_subprocess_exec(
-            *t_am, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        tmp = await create_subprocess_exec(
+            *t_am, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         pro, cess = await tmp.communicate()
         LOGGER.info(pro.decode("utf-8"))
         LOGGER.info(cess.decode("utf-8"))
-        g_file = re.escape(os.path.basename(file_upload))
+        g_file = rescape(opath.basename(file_upload))
         LOGGER.info(g_file)
         with open("filter1.txt", "w+", encoding="utf-8") as filter1:
             print(f"+ {g_file}/\n- *", file=filter1)
@@ -311,45 +280,40 @@ async def upload_to_gdrive(file_upload, message, messa_ge, g_id):
             "--dirs-only",
             f"{gUP}:{destination}",
         ]
-        gau_tam = await asyncio.create_subprocess_exec(
-            *g_a_u, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        gau_tam = await create_subprocess_exec(
+            *g_a_u, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        # os.remove("filter1.txt")
+        # oremove("filter1.txt")
         gau, tam = await gau_tam.communicate()
         gautam = gau.decode("utf-8")
         LOGGER.info(gautam)
         LOGGER.info(tam.decode("utf-8"))
-        # os.remove("filter1.txt")
-        gautii = f"https://drive.google.com/folderview?id={gautam}"
+        # oremove("filter1.txt")
+        gURL = f"https://drive.google.com/folderview?id={gautam}"
         gjay = size(getFolderSize(file_upload))
         LOGGER.info(gjay)
-        button = [
-            [
-                pyrogram.InlineKeyboardButton(
-                    text="☁️ CloudUrl ☁️", url=f"{gautii}"
-                )
-            ]
-        ]
-
+        button = [[
+                InlineKeyboardButton(text="☁️ GDrive Link ☁️", url=f"{gURL}")
+        ]]
+        fileURL = opath.basename(file_upload)
         if INDEX_LINK:
-            indexurl = f"{INDEX_LINK}/{os.path.basename(file_upload)}/"
-            tam_link = requests.utils.requote_uri(indexurl)
-            LOGGER.info(tam_link)
-            button.append(
-                [
-                    pyrogram.InlineKeyboardButton(
-                        text="ℹ️ IndexUrl ℹ️", url=f"{tam_link}"
-                    )
-                ]
-            )
-        button_markup = pyrogram.InlineKeyboardMarkup(button)
-        await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+            _idno = 1
+            INDEXS = INDEX_LINK.split(" ")
+            for index in INDEXS:
+                indexurl = f"{index}/{fileURL}"
+                tam_link = utils.requote_uri(indexurl)
+                LOGGER.info(f'Index Link #{_idno} : {tam_link}')
+                button.append([
+                    InlineKeyboardButton(text=f"⚡️ Index Link #{_idno}⚡️", url=f"{tam_link}")
+                ])
+                _idno += 1
+        button_markup = InlineKeyboardMarkup(button)
+        await asleep(EDIT_SLEEP_TIME_OUT)
         await messa_ge.reply_text(
-            f"🤖: Uploaded successfully `{os.path.basename(file_upload)}` <a href='tg://user?id={g_id}'>🤒</a>\n📀 Size: {gjay}",
+            f"📨 **Name** : `{fileURL}`\n\n📊 **Total Size** : `{gjay}B`\n\n👤 **Req By:** {messa_ge.from_user.mention} ( #ID{messa_ge.from_user.id} )",
             reply_markup=button_markup,
         )
-        shutil.rmtree(file_upload)
-
+        rmtree(file_upload)
     await del_it.delete()
 
 
@@ -357,25 +321,17 @@ VIDEO_SUFFIXES = ("MKV", "MP4", "MOV", "WMV", "3GP", "MPG", "WEBM", "AVI", "FLV"
 AUDIO_SUFFIXES = ("MP3", "M4A", "M4B", "FLAC", "WAV", "AIF", "OGG", "AAC", "DTS", "MID", "AMR", "MKA")
 IMAGE_SUFFIXES = ("JPG", "JPX", "PNG", "WEBP", "CR2", "TIF", "BMP", "JXR", "PSD", "ICO", "HEIC", "JPEG")
 
-async def upload_single_file(
-    message, local_file_name, caption_str, from_user, client, edit_media, yt_thumb, prm_atv: bool
-):
+async def upload_single_file(message, local_file_name, caption_str, from_user, client, edit_media, yt_thumb, prm_atv: bool):
     idc = False
-    base_file_name = os.path.basename(local_file_name)
-    await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+    base_file_name = opath.basename(local_file_name)
+    await asleep(EDIT_SLEEP_TIME_OUT)
     local_file_name = str(Path(local_file_name).resolve())
     sent_message = None
-    start_time = time.time()
-    thumbnail_location = os.path.join(
-        DOWNLOAD_LOCATION, "thumbnails", str(from_user) + ".jpg"
-    )
-    # LOGGER.info(thumbnail_location)
-    dyna_user_config_upload_as_doc = False
-    for key in iter(user_specific_config):
-        if key == from_user:
-            dyna_user_config_upload_as_doc=user_specific_config[key].upload_as_doc
-            LOGGER.info(f'Found Dyanamic Config for User : {from_user}')
-    
+    start_time = time()
+    thumbnail_location = f"{DOWNLOAD_LOCATION}/thumbnails/{from_user}.jpg"
+
+    __uploadAsDoc = user_specific_config.get(from_user, False)
+        
     global PRM_LOG
     if isUserPremium and (not PRM_LOG) and LEECH_LOG:
         PRM_LOG = LEECH_LOG
@@ -385,22 +341,22 @@ async def upload_single_file(
         prm_atv = False
 
     global EXCEP_CHATS
-    if (not EXCEP_CHATS):
+    if (not EXCEP_CHATS) and (not LEECH_LOG):
         EXCEP_CHATS = AUTH_CHANNEL
         LOGGER.info("[IDLE] Switching AUTH_CHANNEL to EXCEP_CHATS")
 
-    if UPLOAD_AS_DOC.upper() == "TRUE" or dyna_user_config_upload_as_doc:
+    if UPLOAD_AS_DOC.lower() == "true" or __uploadAsDoc:
         thumb = None
         thumb_image_path = None
-        if os.path.exists(thumbnail_location):
+        if opath.exists(thumbnail_location):
             thumb_image_path = await copy_file(
-                thumbnail_location, os.path.dirname(os.path.abspath(local_file_name))
+                thumbnail_location, opath.dirname(opath.abspath(local_file_name))
             )
-            thumb = thumb_image_path
+        thumb = thumb_image_path
         message_for_progress_display = message
         if not edit_media:
             message_for_progress_display = await message.reply_text(
-                "<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: <code>{}</code>".format(os.path.basename(local_file_name))
+                ((BotTheme(from_user)).START_UPLOAD_MSG).format(filename = opath.basename(local_file_name))
             )
             prog = Progress(from_user, client, message_for_progress_display)
         LOGGER.info(f"Premium Active : {prm_atv}")
@@ -413,7 +369,7 @@ async def upload_single_file(
                 disable_notification=True,
                 progress=prog.progress_for_pyrogram,
                 progress_args=(
-                    f"◆━━━━━━◆ ❃ ◆━━━━━━◆\n\n┏━━━━━━━━━━━━━━━━╻\n┣⚡️ 𝐅𝐢𝐥𝐞𝐧𝐚𝐦𝐞 : `{os.path.basename(local_file_name)}`",
+                    ((BotTheme(from_user)).TOP_PROG_MSG).format(base_file_name = opath.basename(local_file_name)),
                     start_time,
                 ),
             )
@@ -429,18 +385,18 @@ async def upload_single_file(
                     disable_notification=True,
                     progress=prog.progress_for_pyrogram,
                     progress_args=(
-                        f"◆━━━━━━◆ ❃ ◆━━━━━━◆\n\n┏━━━━━━━━━━━━━━━━╻\n┣⚡️ 𝐅𝐢𝐥𝐞𝐧𝐚𝐦𝐞 : `{os.path.basename(local_file_name)}`",
+                        ((BotTheme(from_user)).TOP_PROG_MSG).format(base_file_name = opath.basename(local_file_name)),
                         start_time,
                     ),
                 )
                 LOGGER.info("UserBot Upload : Completed")
             try:
-                sent_message = await bot.send_document(
+                sent_message = await client.send_document(
                     chat_id=message.chat.id,
                     document=sent_msg.document.file_id,
                     thumb=thumb,
                     caption=caption_str,
-                    parse_mode=ParseMode.HTML,
+                    parse_mode=enums.ParseMode.HTML,
                     disable_notification=True,
                     reply_to_message_id=message.id
                 )
@@ -450,28 +406,28 @@ async def upload_single_file(
                     sent_message = await sent_msg.copy(chat_id = message.chat.id, reply_to_message_id=message.id)
                 except Exception as er:
                     LOGGER.info(f"[4GB UPLOAD USER] : {er}")
-                    sent_message = bot.copy_message(
+                    sent_message = await client.copy_message(
                         chat_id=message.chat.id,
                         from_chat_id=int(PRM_LOG),
                         message_id=sent_msg.id,
                         caption=caption_str,
-                        parse_mode=ParseMode.HTML,
+                        parse_mode=enums.ParseMode.HTML,
                         reply_to_message_id=message.id
                     )
                     idc = True
             LOGGER.info("Bot 4GB Upload : Completed")
         else:
-            sent_message = await bot.send_document(
+            sent_message = await client.send_document(
                 chat_id=int(LEECH_LOG),
                 document=local_file_name,
                 thumb=thumb,
-                caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 @FXTorrentz ♨️",
-                parse_mode=ParseMode.HTML,
+                caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL} ♨️",
+                parse_mode=enums.ParseMode.HTML,
                 disable_notification=True,
             )
             if BOT_PM:
                 try:
-                  bot.send_document(
+                  await client.send_document(
                       chat_id=from_user, 
                       document=sent_message.document.file_id,
                       thumb=thumb,
@@ -482,12 +438,12 @@ async def upload_single_file(
                    LOGGER.error(f"Failed To Send Document in User PM:\n{err}")
             if EX_LEECH_LOG:
                 try:
-                    for i in EX_LEECH_LOG:
-                        bot.send_document(
-                            chat_id=i, 
+                    for chat_id in EX_LEECH_LOG:
+                        await client.send_document(
+                            chat_id=int(chat_id), 
                             document=sent_message.document.file_id,
                             thumb=thumb,
-                            caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 @FXTorrentz ♨️",
+                            caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL} ♨️",
                             parse_mode=enums.ParseMode.HTML
                         )
                 except Exception as err:
@@ -496,18 +452,18 @@ async def upload_single_file(
             try:
                 await message_for_progress_display.delete()
             except FloodWait as gf:
-                time.sleep(gf.value)
+                tsleep(gf.value)
             except Exception as rr:
-                LOGGER.warning(str(rr))
-        os.remove(local_file_name)
+                LOGGER.warning(rr)
+        oremove(local_file_name)
         if thumb is not None:
-            os.remove(thumb)
+            oremove(thumb)
     else:
         try:
             message_for_progress_display = message
             if not edit_media:
                 message_for_progress_display = await message.reply_text(
-                    "<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: <code>{}</code>".format(os.path.basename(local_file_name))
+                    ((BotTheme(from_user)).START_UPLOAD_MSG).format(filename = opath.basename(local_file_name))
                 )
                 prog = Progress(from_user, client, message_for_progress_display)
             if local_file_name.upper().endswith(VIDEO_SUFFIXES):
@@ -521,53 +477,46 @@ async def upload_single_file(
                 width = 0
                 height = 0
                 thumb_image_path = None
-                if os.path.exists(thumbnail_location):
+                if opath.exists(thumbnail_location):
                     thumb_image_path = await copy_file(
                         thumbnail_location,
-                        os.path.dirname(os.path.abspath(local_file_name)),
+                        opath.dirname(opath.abspath(local_file_name)),
                     )
                 else:
                     if not yt_thumb:
                         LOGGER.info("📸 Taking Screenshot..")
                         thumb_image_path = await take_screen_shot(
                             local_file_name,
-                            os.path.dirname(os.path.abspath(local_file_name)),
+                            opath.dirname(opath.abspath(local_file_name)),
                             (duration / 2),
                         )
                     else:
-                        req = requests.get(yt_thumb)
-                        thumb_image_path = os.path.join(
-                            os.path.dirname(os.path.abspath(local_file_name)),
-                            str(time.time()) + ".jpg",
+                        req = rget(yt_thumb)
+                        thumb_image_path = opath.join(
+                            opath.dirname(opath.abspath(local_file_name)),
+                            str(time()) + ".jpg",
                         )
                         with open(thumb_image_path, "wb") as thum:
                             thum.write(req.content)
                         img = Image.open(thumb_image_path).convert("RGB")
                         img.save(thumb_image_path, format="jpeg")
-                    # get the correct width, height, and duration for videos greater than 10MB
-                    if os.path.exists(thumb_image_path):
+                    if opath.exists(thumb_image_path):
                         metadata = extractMetadata(createParser(thumb_image_path))
                         if metadata.has("width"):
                             width = metadata.get("width")
                         if metadata.has("height"):
                             height = metadata.get("height")
-                        # ref: https://t.me/PyrogramChat/44663
-                        # https://stackoverflow.com/a/21669827/4723940
-                        Image.open(thumb_image_path).convert("RGB").save(
-                            thumb_image_path
-                        )
+                        Image.open(thumb_image_path).convert("RGB").save(thumb_image_path)
                         img = Image.open(thumb_image_path)
-                        # https://stackoverflow.com/a/37631799/4723940
                         img.resize((320, height))
                         img.save(thumb_image_path, "JPEG")
-                        # https://pillow.readthedocs.io/en/3.1.x/reference/Image.html#create-thumbnails
-                #
+
                 thumb = None
-                if thumb_image_path is not None and os.path.isfile(thumb_image_path):
+                if thumb_image_path is not None and opath.isfile(thumb_image_path):
                     thumb = thumb_image_path
-                # send video
+
                 if edit_media and message.photo:
-                    await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+                    await asleep(EDIT_SLEEP_TIME_OUT)
                     sent_message = await message.edit_media(
                         media=InputMediaVideo(
                             media=local_file_name,
@@ -579,7 +528,6 @@ async def upload_single_file(
                             duration=duration,
                             supports_streaming=True,
                         )
-                        # quote=True,
                     )
                 else:
                     if str(message.chat.id) in str(EXCEP_CHATS) and not prm_atv:
@@ -595,7 +543,7 @@ async def upload_single_file(
                             disable_notification=True,
                             progress=prog.progress_for_pyrogram,
                             progress_args=(
-                                f"<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: `{os.path.basename(local_file_name)}`",
+                                ((BotTheme(from_user)).TOP_PROG_MSG).format(base_file_name = opath.basename(local_file_name)),
                                 start_time,
                             ),
                          )
@@ -615,13 +563,13 @@ async def upload_single_file(
                                 disable_notification=True,
                                 progress=prog.progress_for_pyrogram,
                                 progress_args=(
-                                    f"◆━━━━━━◆ ❃ ◆━━━━━━◆\n\n┏━━━━━━━━━━━━━━━━╻\n┣⚡️ 𝐅𝐢𝐥𝐞𝐧𝐚𝐦𝐞 : `{os.path.basename(local_file_name)}`",
+                                    ((BotTheme(from_user)).START_UPLOAD_MSG).format(filename = opath.basename(local_file_name)),
                                     start_time,
                                 ),
                             )
                             LOGGER.info("UserBot Upload : Completed")
                         try:
-                            sent_message = await bot.send_video(
+                            sent_message = await client.send_video(
                                 chat_id=message.chat.id,
                                 video=sent_msg.video.file_id,
                                 thumb=thumb,
@@ -630,7 +578,7 @@ async def upload_single_file(
                                 height=height,
                                 supports_streaming=True,
                                 caption=caption_str,
-                                parse_mode=ParseMode.HTML,
+                                parse_mode=enums.ParseMode.HTML,
                                 disable_notification=True,
                                 reply_to_message_id=message.id
                             )
@@ -640,21 +588,21 @@ async def upload_single_file(
                                 sent_message = await sent_msg.copy(chat_id = message.chat.id, reply_to_message_id=message.id)
                             except Exception as er:
                                 LOGGER.info(f"[4GB UPLOAD USER] : {er}")
-                                sent_message = bot.copy_message(
+                                sent_message = await client.copy_message(
                                     chat_id=message.chat.id,
                                     from_chat_id=int(PRM_LOG),
                                     message_id=sent_msg.id,
                                     caption=caption_str,
-                                    parse_mode=ParseMode.HTML,
+                                    parse_mode=enums.ParseMode.HTML,
                                     reply_to_message_id=message.id
                                 )
                                 idc = True
                         LOGGER.info("Bot 4GB Upload : Completed")
                     else:
-                        sent_message = await message.sent_video(
-                            chat_id=LEECH_LOG,
+                        sent_message = await client.send_video(
+                            chat_id=int(LEECH_LOG),
                             video=local_file_name,
-                            caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 @FXTorrentz ♨️",
+                            caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL} ♨️",
                             parse_mode=enums.ParseMode.HTML,
                             duration=duration,
                             width=width,
@@ -664,13 +612,13 @@ async def upload_single_file(
                             disable_notification=True,
                             progress=prog.progress_for_pyrogram,
                             progress_args=(
-                                f"<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: `{os.path.basename(local_file_name)}`",
+                                ((BotTheme(from_user)).TOP_PROG_MSG).format(base_file_name = opath.basename(local_file_name)),
                                 start_time,
                             ),
                          )
                         if BOT_PM:
                             try:
-                                bot.send_video(
+                                await client.send_video(
                                     chat_id=from_user, 
                                     video=sent_message.video.file_id,
                                     thumb=thumb,
@@ -682,20 +630,21 @@ async def upload_single_file(
                                 LOGGER.error(f"Failed To Send Video in User PM:\n{err}")
                         if EX_LEECH_LOG:
                             try:
-                                for i in EX_LEECH_LOG:
-                                    bot.send_video(
-                                        chat_id=i, 
+                                for chat_id in EX_LEECH_LOG:
+                                    await client.send_video(
+                                        chat_id=int(chat_id), 
                                         video=sent_message.video.file_id,
                                         thumb=thumb,
                                         supports_streaming=True,
-                                        caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 @FXTorrentz ♨️",
+                                        caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL} ♨️",
                                         parse_mode=enums.ParseMode.HTML
                                     )
                             except Exception as err:
                                 LOGGER.error(f"Failed To Send Video in Channel:\n{err}")
                 if thumb is not None:
-                    os.remove(thumb)
+                    oremove(thumb)
             elif local_file_name.upper().endswith(AUDIO_SUFFIXES):
+
                 metadata = extractMetadata(createParser(local_file_name))
                 duration = 0
                 title = ""
@@ -706,18 +655,18 @@ async def upload_single_file(
                     title = metadata.get("title")
                 if metadata.has("artist"):
                     artist = metadata.get("artist")
+
                 thumb_image_path = None
-                if os.path.isfile(thumbnail_location):
+                if opath.isfile(thumbnail_location):
                     thumb_image_path = await copy_file(
                         thumbnail_location,
-                        os.path.dirname(os.path.abspath(local_file_name)),
+                        opath.dirname(opath.abspath(local_file_name)),
                     )
                 thumb = None
-                if thumb_image_path is not None and os.path.isfile(thumb_image_path):
+                if thumb_image_path is not None and opath.isfile(thumb_image_path):
                     thumb = thumb_image_path
-                # send audio
                 if edit_media and message.photo:
-                    await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+                    await asleep(EDIT_SLEEP_TIME_OUT)
                     sent_message = await message.edit_media(
                         media=InputMediaAudio(
                             media=local_file_name,
@@ -730,58 +679,72 @@ async def upload_single_file(
                         )
                     )
                 else:
-                    sent_message = await message.reply_audio(
-                        audio=local_file_name,
-                        caption=caption_str,
-                        parse_mode=enums.ParseMode.HTML,
-                        duration=duration,
-                        performer=artist,
-                        title=title,
-                        thumb=thumb,
-                        disable_notification=True,
-                        progress=prog.progress_for_pyrogram,
-                        progress_args=(
-                            f"<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: `{os.path.basename(local_file_name)}`",
-                            start_time,
-                        ),
-                    )
-                    if BOT_PM:
-                        try:
-                            bot.send_audio(
-                                chat_id=from_user, 
-                                audio=sent_message.audio.file_id,
-                                thumb=thumb,
-                                caption=caption_str,
-                            )
-                        except Exception as err:
-                            LOGGER.error(f"Failed To Send Audio in User PM:\n{err}")
-                    if LEECH_LOG:
-                        try:
-                            for i in LEECH_LOG:
-                                bot.send_audio(
-                                    chat_id=i, 
-                                    document=sent_message.audio.file_id,
+                    if str(message.chat.id) in str(EXCEP_CHATS):
+                        sent_message = await message.reply_audio(
+                            audio=local_file_name,
+                            caption=caption_str,
+                            parse_mode=enums.ParseMode.HTML,
+                            duration=duration,
+                            performer=artist,
+                            title=title,
+                            thumb=thumb,
+                            disable_notification=True,
+                            progress=prog.progress_for_pyrogram,
+                            progress_args=(
+                                ((BotTheme(from_user)).START_UPLOAD_MSG).format(filename = opath.basename(local_file_name)),
+                                start_time,
+                            ),
+                        )
+                    else:
+                        sent_message = await client.send_audio(
+                            chat_id=int(LEECH_LOG),
+                            audio=local_file_name,
+                            caption=caption_str,
+                            parse_mode=enums.ParseMode.HTML,
+                            duration=duration,
+                            performer=artist,
+                            title=title,
+                            thumb=thumb,
+                            disable_notification=True,
+                            progress=prog.progress_for_pyrogram,
+                            progress_args=(
+                                ((BotTheme(from_user)).START_UPLOAD_MSG).format(filename = opath.basename(local_file_name)),
+                                start_time,
+                            ),
+                        )
+                        if BOT_PM:
+                            try:
+                                await client.send_audio(
+                                    chat_id=from_user, 
+                                    audio=sent_message.audio.file_id,
                                     thumb=thumb,
-                                    caption=f"<code>{base_file_name}</code>",
+                                    caption=caption_str,
                                 )
-                        except Exception as err:
-                            LOGGER.error(f"Failed To Send Audio in User PM:\n{err}")
+                            except Exception as err:
+                                LOGGER.error(f"Failed To Send Audio in User PM:\n{err}")
+                        if EX_LEECH_LOG:
+                            try:
+                                for chat_id in EX_LEECH_LOG:
+                                    await client.send_audio(
+                                        chat_id=int(chat_id), 
+                                        document=sent_message.audio.file_id,
+                                        thumb=thumb,
+                                        caption=f"<code>{base_file_name}</code>",
+                                    )
+                            except Exception as err:
+                                LOGGER.error(f"Failed To Send Audio in User PM:\n{err}")
                 if thumb is not None:
-                    os.remove(thumb)
+                    oremove(thumb)
             else:
                 thumb_image_path = None
-                if os.path.isfile(thumbnail_location):
+                if opath.isfile(thumbnail_location):
                     thumb_image_path = await copy_file(
                         thumbnail_location,
-                        os.path.dirname(os.path.abspath(local_file_name)),
+                        opath.dirname(opath.abspath(local_file_name)),
                     )
-                # if a file, don't upload "thumb"
-                # this "diff" is a major derp -_- 😔😭😭
                 thumb = None
-                if thumb_image_path is not None and os.path.isfile(thumb_image_path):
+                if thumb_image_path is not None and opath.isfile(thumb_image_path):
                     thumb = thumb_image_path
-                #
-                # send document
                 if edit_media and message.photo:
                     sent_message = await message.edit_media(
                         media=InputMediaDocument(
@@ -801,27 +764,27 @@ async def upload_single_file(
                             disable_notification=True,
                             progress=prog.progress_for_pyrogram,
                             progress_args=(
-                                f"<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: `{os.path.basename(local_file_name)}`",
+                                ((BotTheme(from_user)).TOP_PROG_MSG).format(base_file_name = opath.basename(local_file_name)),
                                 start_time,
                             ),
                         )
                     else:
-                        sent_message = await bot.send_document(
-                            chat_id=LEECH_LOG,
+                        sent_message = await client.send_document(
+                            chat_id=int(LEECH_LOG),
                             document=local_file_name,
                             thumb=thumb,
-                            caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 @FXTorrentz ♨️",
+                            caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL} ♨️",
                             parse_mode=enums.ParseMode.HTML,
                             disable_notification=True,
                             progress=prog.progress_for_pyrogram,
                             progress_args=(
-                                f"<b>🔰Status : <i>Starting Uploading...📤</i></b>\n\n🗃<b> File Name</b>: `{os.path.basename(local_file_name)}`",
+                                ((BotTheme(from_user)).TOP_PROG_MSG).format(base_file_name = opath.basename(local_file_name)),
                                 start_time,
                             ),
                         )
                         if BOT_PM:
                             try:
-                                bot.send_document(
+                                await client.send_document(
                                     chat_id=from_user, 
                                     document=sent_message.document.file_id,
                                     thumb=thumb,
@@ -832,31 +795,36 @@ async def upload_single_file(
                                 LOGGER.error(f"Failed To Send Document in User PM:\n{err}")
                         if EX_LEECH_LOG:
                             try:
-                                for i in EX_LEECH_LOG:
-                                    bot.send_document(
-                                        chat_id=i, 
+                                for chat_id in EX_LEECH_LOG:
+                                    await client.send_document(
+                                        chat_id=int(chat_id), 
                                         document=sent_message.document.file_id,
                                         thumb=thumb,
-                                        caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 @FXTorrentz ♨️",
+                                        caption=f"<code>{base_file_name}</code>\n\n♨️ 𝕌𝕡𝕝𝕠𝕒𝕕𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL} ♨️",
                                         parse_mode=enums.ParseMode.HTML
                                     )
                             except Exception as err:
                                 LOGGER.error(f"Failed To Send Document in Channel:\n{err}")
                 if thumb is not None:
-                    os.remove(thumb)
+                    oremove(thumb)
 
         except MessageNotModified as oY:
             LOGGER.info(oY)
         except FloodWait as g:
-            LOGGER.info(f"FloodWait : Sleeping {e.value}s")
-            time.sleep(g.value)
+            LOGGER.info(f"FloodWait : Sleeping {g.value}s")
+            tsleep(g.value)
+        except FileNotFoundError:
+            pass
+        except IOError as e:
+            if e.errno == errno.EPIPE:
+                pass
         except Exception as e:
             LOGGER.info(f"[ERROR] : {e}")
             try:
                 await message_for_progress_display.edit_text("**FAILED**\n" + str(e))
             except FloodWait as g:
-                LOGGER.info(f"FloodWait : Sleeping {e.value}s")
-                time.sleep(g.value)
+                LOGGER.info(f"FloodWait : Sleeping {g.value}s")
+                tsleep(g.value)
         else:
             if message.id != message_for_progress_display.id:
                 try:
@@ -864,9 +832,9 @@ async def upload_single_file(
                         await message_for_progress_display.delete()
                 except FloodWait as gf:
                     LOGGER.info(f"FloodWait : Sleeping {gf.value}s")
-                    time.sleep(gf.value)
+                    tsleep(gf.value)
                 except Exception as rr:
                     LOGGER.warning(str(rr))
-                    await asyncio.sleep(5)
-        os.remove(local_file_name)
+                    await asleep(5)
+        oremove(local_file_name)
     return sent_message, idc

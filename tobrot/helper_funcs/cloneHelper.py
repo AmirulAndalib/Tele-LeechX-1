@@ -7,12 +7,11 @@
 # This is Part of < https://github.com/5MysterySD/Tele-LeechX >
 # All Right Reserved
 
-import asyncio
-import os
-import re
-
-import pyrogram.types as pyrogram
-import requests
+from asyncio import create_subprocess_exec, subprocess, sleep as asleep
+from os import path as opath
+from re import findall, escape, search
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from requests import utils
 from tobrot import (
     DESTINATION_FOLDER,
     EDIT_SLEEP_TIME_OUT,
@@ -40,10 +39,10 @@ class CloneHelper:
         self.dname = ""
 
     def config(self):
-        if os.path.exists("rclone.conf"):
+        if opath.exists("rclone.conf"):
             with open("rclone.conf", "r+") as file:
                 con = file.read()
-                self.dname = re.findall(r"\[(.*)\]", con)[0]
+                self.dname = findall(r"\[(.*)\]", con)[0]
 
     async def get_id(self):
         mes = self.mess
@@ -60,16 +59,26 @@ class CloneHelper:
             if USER_DTS:
                 process = await mes.reply_text(f"{def_text}**📎 GDToT Link** : `{mess[0]}`\n\n `Generating . . .`")
             info_parsed = gdtot(mess[0])
-            message = info_parsed['gdrive_link']
-            if USER_DTS:
-                await process.edit_text(f"{def_text}**📎GDToT Link** : `{mess[0]}`\n**☁️ GDrive Link** : `{message}`")
+            if info_parsed['gdrive_link']:
+                message = info_parsed['gdrive_link']
+                if USER_DTS:
+                    await process.edit_text(f"{def_text}**📎GDToT Link** : `{mess[0]}`\n**☁️ GDrive Link** : `{message}`")
+            else:
+                if USER_DTS:
+                    await process.edit_text(f"{def_text}**📎GDToT Link** : `{mess[0]}`\n**⛔️ Error** : `{info_parsed['message']}`")
+                return
         elif is_appdrive_link(mess[0]):
             if USER_DTS:
                 process = await mes.reply_text(f"{def_text}**📎 AppDrive Link** : `{mess[0]}`\n\n `Generating . . .`")
             info_parsed = appdrive_dl(mess[0], is_direct=False)
-            message = info_parsed['gdrive_link']
-            if USER_DTS:
-                await process.edit_text(f"{def_text}**📎 AppDrive Link** : `{mess[0]}`\n**☁️ GDrive Link** : `{message}`")
+            if info_parsed['gdrive_link']:
+                message = info_parsed['gdrive_link']
+                if USER_DTS:
+                    await process.edit_text(f"{def_text}**📎 AppDrive Link** : `{mess[0]}`\n**☁️ GDrive Link** : `{message}`")
+            else:
+                if USER_DTS:
+                    await process.edit_text(f"{def_text}**📎 AppDrive Link** : `{mess[0]}`\n**⛔️ Error** : `{info_parsed['error_message']}`")
+                return
         elif "kolop.icu" in mess[0]:
             if USER_DTS:
                 process = await mes.reply_text(f"{def_text}**📎 Kolop Link** : `{mess[0]}`\n\n `Generating . . .`")
@@ -132,26 +141,17 @@ class CloneHelper:
                 _up = "Folder"
                 _drive = "folderba"
                 _ui = "/"
-            g_name = re.escape(self.name)
+            g_name = escape(self.name)
             LOGGER.info(g_name)
             destination = f"{DESTINATION_FOLDER}"
 
             with open("filter1.txt", "w+", encoding="utf-8") as filter1:
                 print(f"+ {g_name}{_ui}\n- *", file=filter1)
 
-            g_a_u = [
-                "rclone",
-                "lsf",
-                "--config=./rclone.conf",
-                "-F",
-                "i",
-                "--filter-from=./filter1.txt",
-                f"{_flag}",
-                f"{self.dname}:{destination}",
-            ]
+            g_a_u = ["rclone","lsf","--config=./rclone.conf", "-F", "i", "--filter-from=./filter1.txt", f"{_flag}", f"{self.dname}:{destination}"]
             LOGGER.info(g_a_u)
-            gau_tam = await asyncio.create_subprocess_exec(
-                *g_a_u, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            gau_tam = await create_subprocess_exec(
+                *g_a_u, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             gau, tam = await gau_tam.communicate()
             LOGGER.info(gau)
@@ -165,16 +165,12 @@ class CloneHelper:
                 gautii = f"https://drive.google.com/file/d/{gautam}/view?usp=drivesdk"
 
             LOGGER.info(gautii)
-            gau_link = re.search(r"(?P<url>https?://[^\s]+)", gautii).group("url")
+            gau_link = search(r"(?P<url>https?://[^\s]+)", gautii).group("url")
             LOGGER.info(gau_link)
             button = []
-            button.append(
-                [
-                    pyrogram.InlineKeyboardButton(
-                        text="☁️ GDrive Link ☁️", url=f"{gau_link}"
-                    )
-                ]
-            )
+            button.append([
+                InlineKeyboardButton(text="☁️ GDrive Link ☁️", url=f"{gau_link}")
+            ])
             if INDEX_LINK:
                 _idno = 1
                 INDEXS = INDEX_LINK.split(" ")
@@ -183,42 +179,37 @@ class CloneHelper:
                         indexurl = f"{indexes}/{self.name}"
                     else:
                         indexurl = f"{indexes}/{self.name}/"
-                    tam_link = requests.utils.requote_uri(indexurl)
+                    tam_link = utils.requote_uri(indexurl)
                     LOGGER.info(f"Index Link: {tam_link}, ID No. : {_idno}")
                     if VIEW_LINK and (not indexurl.endswith('/')):
                         view_link_ = f"{tam_link}?a=view"
                         button.append([
-                            pyrogram.InlineKeyboardButton(text=f"⚡️ Index Link #{_idno}⚡️", url=f"{tam_link}"),
-                            pyrogram.InlineKeyboardButton(text=f"🌐 View Link #{_idno}", url=f"{view_link_}")
+                            InlineKeyboardButton(text=f"⚡️ Index Link #{_idno}⚡️", url=f"{tam_link}"),
+                            InlineKeyboardButton(text=f"🌐 View Link #{_idno}", url=f"{view_link_}")
                             ]
                         )
                     else:
                         button.append([
-                            pyrogram.InlineKeyboardButton(
+                            InlineKeyboardButton(
                                 text=f"⚡️ Index Link #{_idno}⚡️", url=f"{tam_link}"
                             )]
                         )
-                    _idno = _idno + 1
-            button_markup = pyrogram.InlineKeyboardMarkup(button)
+                    _idno += 1
+            button_markup = InlineKeyboardMarkup(button)
             msg = await self.lsg.edit_text(
                 f"📨 **Name** : `{self.name}`\n\n📚 **Type** : __{_up}__\n\n🗃 **Total Files** : `Calculating ..` 🛃\n📊 **Total Size** : `Calculating ..` 🛃\n\n👤 Req By: {self.u_men} ( #ID{self.u_id} )",
                 reply_markup=button_markup,
             )
-            g_cmd = [
-                "rclone",
-                "size",
-                "--config=rclone.conf",
-                f"{self.dname}:{destination}/{self.name}",
-            ]
+            g_cmd = ["rclone", "size", "--config=rclone.conf", f"{self.dname}:{destination}/{self.name}"]
             LOGGER.info(g_cmd)
-            gaut_am = await asyncio.create_subprocess_exec(
-                *g_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            gaut_am = await create_subprocess_exec(
+                *g_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             gaut, am = await gaut_am.communicate()
             g_autam = gaut.decode("utf-8")
             LOGGER.info(g_autam)
             LOGGER.info(am.decode("utf-8"))
-            await asyncio.sleep(EDIT_SLEEP_TIME_OUT)
+            await asleep(EDIT_SLEEP_TIME_OUT)
             g_autam = g_autam.replace("Total objects:", "🗃 **Total Files** :").replace("Total size:", "📊 **Total Size** :")
             await msg.edit_text(
                 f"📨 **Name** : `{self.name}`\n\n📚 **Type** : __{_up}__\n\n{g_autam}\n👤 Req By: {self.u_men} ( #ID{self.u_id} )",
@@ -241,10 +232,15 @@ class CloneHelper:
             "--checkers=20",
         ]
         LOGGER.info(cmd)
-        pro = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        p, e = await pro.communicate()
+        try:
+            pro = await create_subprocess_exec(
+                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            p, e = await pro.communicate()
+        except 'userRateLimitExceeded' in Exception:
+            self.lsg.edit_text("‼️ **ERROR** ‼️\n\n Error 403: User rate limit exceeded.")
+        except Exception as err:
+            self.lsg.edit_text(f"‼️ **ERROR** ‼️\n\n {err}")
         self.out = p
         LOGGER.info(self.out)
         err = e.decode()
@@ -254,12 +250,12 @@ class CloneHelper:
         try:
             if self.name == "":
                 reg_f = "INFO(.*)(:)(.*)(:) (Copied)"
-                file_n = re.findall(reg_f, err)
+                file_n = findall(reg_f, err)
                 self.name = file_n[0][2].strip()
                 LOGGER.info(file_n[0][2].strip())
                 self.filee = self.name
         except IndexError:
-            await asyncio.sleep(3)
+            await asleep(3)
             await self.lsg.edit_text(f"‼️ **ERROR** ‼️\n\nTry Any Other URL or Try Again")
         except Exception as err:
             LOGGER.info(err)

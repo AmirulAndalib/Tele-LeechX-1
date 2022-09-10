@@ -3,20 +3,23 @@ import json
 import cloudscraper
 
 from urllib.parse import quote as q
+from asyncio import sleep as asleep
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from tobrot import LOGGER, UPDATES_CHANNEL
-from tobrot.helper_funcs.display_progress import humanbytes
+from tobrot.helper_funcs.display_progress import humanbytes_int
+from tobrot.plugins import getUserOrChaDetails
 from tobrot.plugins.mediainfo import post_to_telegraph
+from tobrot.bot_theme.themes import BotTheme
 
-nexPage = False #ToDo
+nexPage = False
 nexPageToken = "" 
 
 def authorization_token(username, password):
     user_pass = f"{username}:{password}"
     return f"Basic {base64.b64encode(user_pass.encode()).decode()}"
 	 	 
-def scrapeURL(payload_input, url, username, password): 
+async def scrapeURL(payload_input, url, username, password): 
     global nexPage
     global nexPageToken
     url = f"{url}/" if url[-1] != '/' else url
@@ -51,26 +54,39 @@ def scrapeURL(payload_input, url, username, password):
     scpText = ""
 
     scpText += f"🗄 <i><b> Total Files : </b></i> {file_length} <br><br>"
+    LOGGER.info(file_length)
     for i, _ in enumerate(range(file_length)):
 
         files_type = deResp["data"]["files"][i]["mimeType"]
         files_name = deResp["data"]["files"][i]["name"]
-        if files_type != "application/vnd.google-apps.folder":
-            direct_download_link = url + q(files_name)
-            no = i + 1
-            LOGGER.info(direct_download_link)
+        direct_download_link = url + q(files_name)
+        no = i + 1
+        LOGGER.info(direct_download_link)
+        if files_type == "application/vnd.google-apps.folder":
+            url_link = f'{direct_download_link}/'
+            scpText += f"📄 <strong>{no}. {files_name}</strong> : <br><br><pre>🔖 Directory Index Link :<a href='{url_link}'> Index Link </a> <br>"
+            #await asleep(10)
+            #scpInText, error = await scrapeURL(payload_input, url, username, password)
+            #if not error:
+            #    title = "Directory Link Scrapper"
+            #    tgh_link = post_to_telegraph(title, scpInText)
+            #    LOGGER.info(tgh_link)
+            #    scpText += f"<br>📂 Telegraph Link : <a href='{tgh_link}'> Click Here </a> | 📋 Type : {files_type} "
+            scpText += f"<br>📂 Size : - | 📋 Type : {files_type} "
+        else:
             scpText += f"📄 <strong>{no}. {files_name}</strong> : <br><br><pre>🔖 Index Link :<a href='{direct_download_link}'> Index Link </a> <br>"
             try:
                 files_size = deResp["data"]["files"][i]["size"]
-                scpText += f"<br>📂 Size : {humanbytes(files_size)} | 📋 Type : {files_type} "
+                scpText += f"<br>📂 Size : {humanbytes_int(files_size)} | 📋 Type : {files_type} "
             except:
                 pass
-            try:
-                files_time   = deResp["data"]["files"][i]["modifiedTime"]
-                scpText += f"| ⏰ Modified Time : {files_time}<br><br>"
-            except:
-                pass
+        try:
+            files_time = deResp["data"]["files"][i]["modifiedTime"]
+            scpText += f"| ⏰ Modified Time : {files_time}<br><br>"
+        except:
+            pass
         scpText += "</pre>"
+    LOGGER.info(scpText)
     return scpText, False
 	        
 	
@@ -81,8 +97,7 @@ async def index_scrape(client, message):
     )
     username = ""
     password = ""
-    user_id_ = message.from_user.id
-    u_men = message.from_user.mention
+    user_id_, u_men = getUserOrChaDetails(message)
     _send = message.text.split(" ", maxsplit=1)
     reply_to = message.reply_to_message
     if len(_send) > 1:
@@ -114,7 +129,7 @@ async def index_scrape(client, message):
         body_text += f"<i>👤 Username :</i> {cname} <br><i>📟 Password :</i> {cpass} <br><hr><br>"
     payload = {"page_token":nexPageToken, "page_index": x}
     LOGGER.info(f"Index Scrape Link: {url}")
-    body_txt, error = scrapeURL(payload, url, username, password)
+    body_txt, error = await scrapeURL(payload, url, username, password)
 
     body_text += str(body_txt)
 
@@ -125,25 +140,23 @@ async def index_scrape(client, message):
 
     while nexPage == True: #Not to be Executed 
         payload = {"page_index":nexPageToken, "page_index": x}
-        print(scrapeURL(payload, url, username, password))
+        print(await scrapeURL(payload, url, username, password))
         x += 1
 
     title = "Index Link Scrapper"
     tgh_link = post_to_telegraph(title, body_text)
 
-    textup = f"""
-┏━📮  𝗜𝗻𝗱𝗲𝘅 𝗦𝗰𝗿𝗮𝗽𝗲 𝗥𝗲𝘀𝘂𝗹𝘁 :
-┃
-┣👤 𝐔𝐬𝐞𝐫 : {u_men} ( #ID{user_id_} )
-┃
-┣🔗 𝗨𝗥𝗟 : <code> {url} </code>
-┃
-┗━♦️ℙ𝕠𝕨𝕖𝕣𝕖𝕕 𝔹𝕪 {UPDATES_CHANNEL}♦️━╹
-"""
     markup_ = InlineKeyboardMarkup([[InlineKeyboardButton(text="Iɴᴅᴇx Sᴄʀᴀᴘᴇ Lɪɴᴋ", url=tgh_link)]])
 
     await lm.delete()
-    await message.reply_text(text=textup, reply_markup=markup_)
+    await message.reply_text(text=((BotTheme(user_id_)).INDEX_SCRAPE_MSG).format(
+            u_men = u_men,
+            uid = user_id_,
+            url = url,
+            UPDATES_CHANNEL = UPDATES_CHANNEL
+        ),
+        reply_markup=markup_
+    )
 
 #┣ 📰 𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲 : {cname}
 #┣ 📟 𝗣𝗮𝘀𝘀𝘄𝗼𝗿𝗱 : {cpass}

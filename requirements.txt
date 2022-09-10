@@ -1,7 +1,6 @@
 aiohttp
 aria2p==0.9.1
 beautifulsoup4
-bencode
 bs4
 cfscrape
 cloudscraper
@@ -14,11 +13,12 @@ imdbpy
 js2py
 lk21
 lxml
-mediainfo
 messages
 natsort
 Pillow
 psutil
+psycopg2-binary
+pycountry
 pyrogram
 python-dotenv
 pyprog

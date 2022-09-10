@@ -7,33 +7,38 @@
 # This is Part of < https://github.com/5MysterySD/Tele-LeechX >
 # All Right Reserved 
 
-import asyncio
 import logging
-import os
-import time
-import urllib.request
-import dotenv
-import telegram.ext as tg
-
+from itertools import count
+from time import time
+from requests import get as rget
+from os import environ, path as opath
 from subprocess import run
+from threading import Lock as ThreadLock
+from asyncio import Lock
+from urllib.request import urlretrieve
 from collections import defaultdict
 from logging.handlers import RotatingFileHandler
 from sys import exit
+from dotenv import load_dotenv
 from pyrogram import Client
+from telegram.ext import Updater
 
 # Adding Files and Data >>>>>>>>
 run(["wget", "-O", "/app/tobrot/aria2/dht.dat", "https://github.com/P3TERX/aria2.conf/raw/master/dht.dat"])
 run(["wget", "-O", "/app/tobrot/aria2/dht6.dat", "https://github.com/P3TERX/aria2.conf/raw/master/dht6.dat"])
 
-# Temporary Fix for Extract Issue >>>>>>>
 run(["chmod", "+x", "extract"])
 
-CONFIG_FILE_URL = os.environ.get('CONFIG_FILE_URL')
+def getVar(var: str, val):
+    return environ.get(var, val)
+
+CONFIG_FILE_URL = getVar('CONFIG_FILE_URL', '')
+
 try:
     if len(CONFIG_FILE_URL) == 0:
         raise TypeError
     try:
-        res = requests.get(CONFIG_FILE_URL)
+        res = rget(CONFIG_FILE_URL)
         if res.status_code == 200:
             with open('config.env', 'wb+') as f:
                 f.write(res.content)
@@ -44,12 +49,12 @@ try:
 except:
     pass
 
-dotenv.load_dotenv("config.env", override=True)
+load_dotenv("config.env", override=True)
 
-UPDATES_CHANNEL = os.environ.get("UPDATES_CHANNEL", "")
+UPDATES_CHANNEL = getVar("UPDATES_CHANNEL", "")
 LOG_FILE_NAME = f"{UPDATES_CHANNEL}Logs.txt"
 
-if os.path.exists(LOG_FILE_NAME):
+if opath.exists(LOG_FILE_NAME):
     with open(LOG_FILE_NAME, "r+") as f_d:
         f_d.truncate(0)
 
@@ -72,35 +77,49 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 LOGGER = logging.getLogger(__name__)
 
 user_specific_config = {}
-__version__ = "2.6.36"
+PRE_DICT = {}
+CAP_DICT = {}
+IMDB_TEMPLATE = {}
+ANILIST_TEMPLATE = {}
+USER_THEMES = {}
+AVAILABLE_THEMES = {}
+__version__ = "2.8.1"
+
+TG_BOT_TOKEN, APP_ID, API_HASH = [], [], []
+
+# The Telegram API things >>>>>>>>>>>
+for x in count():
+    bot_tok = getVar(f"TG_BOT_TOKEN{x + 1}", "")
+    tg_id = getVar(f"APP_ID{x + 1}", "")
+    tg_hash = getVar(f"API_HASH{x + 1}", "")
+    if bot_tok == "" or tg_id == "" or tg_hash == "":
+        break
+    TG_BOT_TOKEN.append(bot_tok)
+    APP_ID.append(int(tg_id))
+    API_HASH.append(tg_hash)
+OWNER_ID = int(getVar("OWNER_ID", ""))
+
+# Heroku & Restart Utils >>>>>>>>>>>
+HEROKU_API_KEY = getVar('HEROKU_API_KEY', None)
+HEROKU_APP_NAME = getVar('HEROKU_APP_NAME', None)
+
+# Authorised Chat Functions >>>>>>>>>>>
+AUTH_CHANNEL = [int(x) for x in getVar("AUTH_CHANNEL", "").split()]
+SUDO_USERS = [int(sudos) if (' ' not in getVar('SUDO_USERS', '')) else int(sudos) for sudos in getVar('SUDO_USERS', '').split()]
+AUTH_CHANNEL.extend((OWNER_ID, 1242011540))
+AUTH_CHANNEL += SUDO_USERS # Change Permissions Soon
+# Download Directory >>>>>>>>>>>
+DOWNLOAD_LOCATION = "./Downloads"
 
 # Compulsory Variables >>>>>>>>
-for imp in ["TG_BOT_TOKEN", "APP_ID", "API_HASH", "OWNER_ID", "AUTH_CHANNEL"]:
+for imp in ["TG_BOT_TOKEN1", "APP_ID1", "API_HASH1", "OWNER_ID", "AUTH_CHANNEL"]:
     try:
-        value = os.environ[imp]
+        value = environ[imp]
         if not value:
             raise KeyError
     except KeyError:
         LOGGER.critical(f"[ERROR] Variable : {imp} Missing from config.env. Fill Up and Retry")
         exit()
-
-# The Telegram API things >>>>>>>>>>>
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
-APP_ID = int(os.environ.get("APP_ID", ""))
-API_HASH = os.environ.get("API_HASH", "")
-OWNER_ID = int(os.environ.get("OWNER_ID", ""))
-
-# Heroku & Restart Utils >>>>>>>>>>>
-HEROKU_API_KEY = os.environ.get('HEROKU_API_KEY', None)
-HEROKU_APP_NAME = os.environ.get('HEROKU_APP_NAME', None)
-
-# Authorised Chat Functions >>>>>>>>>>>
-AUTH_CHANNEL = [int(x) for x in os.environ.get("AUTH_CHANNEL", "").split()]
-SUDO_USERS = [int(sudos) if (' ' not in os.environ.get('SUDO_USERS', '')) else int(sudos) for sudos in os.environ.get('SUDO_USERS', '').split()]
-AUTH_CHANNEL.append(OWNER_ID)
-AUTH_CHANNEL += SUDO_USERS
-# Download Directory >>>>>>>>>>>
-DOWNLOAD_LOCATION = "./Downloads"
 
 # Telegram Max File Upload Size >>>>>>>>>>
 MAX_FILE_SIZE = 50000000
@@ -109,155 +128,190 @@ TG_PRM_FILE_SIZE = 4194304000
 FREE_USER_MAX_FILE_SIZE = 50000000
 
 # chunk size that should be used with requests
-CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "128"))
-DEF_THUMB_NAIL_VID_S = os.environ.get("DEF_THUMB_NAIL_VID_S", "")
+CHUNK_SIZE = int(getVar("CHUNK_SIZE", "128"))
+DEF_THUMB_NAIL_VID_S = getVar("DEF_THUMB_NAIL_VID_S", "")
 MAX_MESSAGE_LENGTH = 4096
 
 # Timeout for Subprocess >>>>>>>>
 PROCESS_MAX_TIMEOUT = 3600
 
 # Internal Requirements >>>>>>>>>>>
-SP_LIT_ALGO_RITH_M = os.environ.get("SP_LIT_ALGO_RITH_M", "hjs")
-ARIA_TWO_STARTED_PORT = int(os.environ.get("ARIA_TWO_STARTED_PORT", "6800"))
-EDIT_SLEEP_TIME_OUT = int(os.environ.get("EDIT_SLEEP_TIME_OUT", "10"))
-MAX_TIME_TO_WAIT_FOR_TORRENTS_TO_START = int(os.environ.get("MAX_TIME_TO_WAIT_FOR_TORRENTS_TO_START", 600))
-MAX_TG_SPLIT_FILE_SIZE = int(os.environ.get("MAX_TG_SPLIT_FILE_SIZE", "2095242840"))
+SP_LIT_ALGO_RITH_M = getVar("SP_LIT_ALGO_RITH_M", "hjs")
+ARIA_TWO_STARTED_PORT = int(getVar("ARIA_TWO_STARTED_PORT", "6800"))
+EDIT_SLEEP_TIME_OUT = int(getVar("EDIT_SLEEP_TIME_OUT", "10"))
+MAX_TIME_TO_WAIT_FOR_TORRENTS_TO_START = int(getVar("MAX_TIME_TO_WAIT_FOR_TORRENTS_TO_START", 600))
+MAX_TG_SPLIT_FILE_SIZE = int(getVar("MAX_TG_SPLIT_FILE_SIZE", "2095242840"))
 
 # Vars for the Display Progress >>>>>>>>
-FINISHED_PROGRESS_STR = os.environ.get("FINISHED_PROGRESS_STR", "■")
-UN_FINISHED_PROGRESS_STR = os.environ.get("UN_FINISHED_PROGRESS_STR", "□")
+FINISHED_PROGRESS_STR = getVar("FINISHED_PROGRESS_STR", "■")
+HALF_FINISHED = getVar("HALF_FINISHED", "◩")
+UN_FINISHED_PROGRESS_STR = getVar("UN_FINISHED_PROGRESS_STR", "□")
 
 # Add Offensive API >>>>>>>>
-TG_OFFENSIVE_API = os.environ.get("TG_OFFENSIVE_API", None)
-CUSTOM_FILE_NAME = os.environ.get("CUSTOM_FILE_NAME", "")
+TG_OFFENSIVE_API = getVar("TG_OFFENSIVE_API", None)
+CUSTOM_FILE_NAME = getVar("CUSTOM_FILE_NAME", "")
 
 #Bot Command [Leech]  >>>>>>>>>>>
-LEECH_COMMAND = os.environ.get("LEECH_COMMAND", "leech")
-LEECH_UNZIP_COMMAND = os.environ.get("LEECH_UNZIP_COMMAND", "extract")
-LEECH_ZIP_COMMAND = os.environ.get("LEECH_ZIP_COMMAND", "archive")
-GLEECH_COMMAND = os.environ.get("GLEECH_COMMAND", "gleech")
-GLEECH_UNZIP_COMMAND = os.environ.get("GLEECH_UNZIP_COMMAND", "gleechunzip")
-GLEECH_ZIP_COMMAND = os.environ.get("GLEECH_ZIP_COMMAND", "gleechzip")
+LEECH_COMMAND = getVar("LEECH_COMMAND", "leech")
+LEECH_UNZIP_COMMAND = getVar("LEECH_UNZIP_COMMAND", "extract")
+LEECH_ZIP_COMMAND = getVar("LEECH_ZIP_COMMAND", "archive")
+GLEECH_COMMAND = getVar("GLEECH_COMMAND", "gleech")
+GLEECH_UNZIP_COMMAND = getVar("GLEECH_UNZIP_COMMAND", "gleechunzip")
+GLEECH_ZIP_COMMAND = getVar("GLEECH_ZIP_COMMAND", "gleechzip")
 
 #Bot Command [yt-dlp] >>>>>>>>>>>
-YTDL_COMMAND = os.environ.get("YTDL_COMMAND", "ytdl")
-GYTDL_COMMAND = os.environ.get("GYTDL_COMMAND", "gytdl")
-PYTDL_COMMAND = os.environ.get("PYTDL_COMMAND", "pytdl")
-GPYTDL_COMMAND = os.environ.get("GPYTDL_COMMAND", "gpytdl")
+YTDL_COMMAND = getVar("YTDL_COMMAND", "ytdl")
+GYTDL_COMMAND = getVar("GYTDL_COMMAND", "gytdl")
+PYTDL_COMMAND = getVar("PYTDL_COMMAND", "pytdl")
+GPYTDL_COMMAND = getVar("GPYTDL_COMMAND", "gpytdl")
 
 #Bot Command [RClone]  >>>>>>>>>>>
-DESTINATION_FOLDER = os.environ.get("DESTINATION_FOLDER", "Tele-LeechX")
-INDEX_LINK = os.environ.get("INDEX_LINK", "")
-VIEW_LINK = os.environ.get("VIEW_LINK", True)
-GET_SIZE_G = os.environ.get("GET_SIZE_G", "getsize")
-CLONE_COMMAND_G = os.environ.get("CLONE_COMMAND_G", "gclone")
-TELEGRAM_LEECH_COMMAND = os.environ.get("TELEGRAM_LEECH_COMMAND", "tleech")
-TELEGRAM_LEECH_UNZIP_COMMAND = os.environ.get("TELEGRAM_LEECH_UNZIP_COMMAND", "tleechunzip")
+DESTINATION_FOLDER = getVar("DESTINATION_FOLDER", "Tele-LeechX")
+INDEX_LINK = getVar("INDEX_LINK", "")
+VIEW_LINK = getVar("VIEW_LINK", True)
+GET_SIZE_G = getVar("GET_SIZE_G", "getsize")
+CLONE_COMMAND_G = getVar("CLONE_COMMAND_G", "gclone")
+TELEGRAM_LEECH_COMMAND = getVar("TELEGRAM_LEECH_COMMAND", "tleech")
+TELEGRAM_LEECH_UNZIP_COMMAND = getVar("TELEGRAM_LEECH_UNZIP_COMMAND", "tleechunzip")
 
 #Bot Command [Miscs]  >>>>>>>>>>>
-CANCEL_COMMAND_G = os.environ.get("CANCEL_COMMAND_G", "cancel")
-STATUS_COMMAND = os.environ.get("STATUS_COMMAND", "status")
-SAVE_THUMBNAIL = os.environ.get("SAVE_THUMBNAIL", "savethumb")
-CLEAR_THUMBNAIL = os.environ.get("CLEAR_THUMBNAIL", "clearthumb")
-UPLOAD_AS_DOC = os.environ.get("UPLOAD_AS_DOC", "False")
-LOG_COMMAND = os.environ.get("LOG_COMMAND", "log")
-STATS_COMMAND = os.environ.get("STATS_COMMAND", "stats")
+STATUS_COMMAND = getVar("STATUS_COMMAND", "status")
+SAVE_THUMBNAIL = getVar("SAVE_THUMBNAIL", "savethumb")
+CLEAR_THUMBNAIL = getVar("CLEAR_THUMBNAIL", "clearthumb")
+UPLOAD_AS_DOC = getVar("UPLOAD_AS_DOC", "False")
+LOG_COMMAND = getVar("LOG_COMMAND", "log")
+STATS_COMMAND = getVar("STATS_COMMAND", "stats")
 
 #Bot Command [Custom Bot Cmd Name]  >>>>>>>>>>>
-SET_BOT_COMMANDS = os.environ.get("SET_BOT_COMMANDS", True)
-UPLOAD_COMMAND = os.environ.get("UPLOAD_COMMAND", "upload")
-RENEWME_COMMAND = os.environ.get("RENEWME_COMMAND", "renewme")
-RENAME_COMMAND = os.environ.get("RENAME_COMMAND", "rename")
-TOGGLE_VID = os.environ.get("TOGGLE_VID", "togglevid")
-TOGGLE_DOC = os.environ.get("TOGGLE_DOC", "toggledoc")
-RCLONE_COMMAND = os.environ.get("RCLONE_COMMAND", "rclone")
-HELP_COMMAND = os.environ.get("HELP_COMMAND", "help")
-SPEEDTEST = os.environ.get("SPEEDTEST", "speedtest")
-TSEARCH_COMMAND = os.environ.get("TSEARCH_COMMAND", "tshelp")
-MEDIAINFO_CMD = os.environ.get("MEDIAINFO_CMD", "mediainfo")
-CAP_STYLE = os.environ.get("CAP_STYLE", "code")
-BOT_NO = os.environ.get("BOT_NO", "")
-USER_DTS = os.environ.get("USER_DTS", True)
-INDEX_SCRAPE = os.environ.get("INDEX_SCRAPE", "indexscrape")
+SET_BOT_COMMANDS = getVar("SET_BOT_COMMANDS", "True")
+UPLOAD_COMMAND = getVar("UPLOAD_COMMAND", "upload")
+RENEWME_COMMAND = getVar("RENEWME_COMMAND", "renewme")
+RENAME_COMMAND = getVar("RENAME_COMMAND", "rename")
+TOGGLE_VID = getVar("TOGGLE_VID", "togglevid")
+TOGGLE_DOC = getVar("TOGGLE_DOC", "toggledoc")
+RCLONE_COMMAND = getVar("RCLONE_COMMAND", "rclone")
+HELP_COMMAND = getVar("HELP_COMMAND", "help")
+SPEEDTEST = getVar("SPEEDTEST", "speedtest")
+TSEARCH_COMMAND = getVar("TSEARCH_COMMAND", "tshelp")
+MEDIAINFO_CMD = getVar("MEDIAINFO_CMD", "mediainfo")
+CAP_STYLE = getVar("CAP_STYLE", "code")
+BOT_NO = getVar("BOT_NO", "")
+USER_DTS = getVar("USER_DTS", True)
+INDEX_SCRAPE = getVar("INDEX_SCRAPE", "indexscrape")
 
 #Bot Command [Token Utils]  >>>>>>>>>>>
-UPTOBOX_TOKEN = os.environ.get("UPTOBOX_TOKEN", "")
-EMAIL = os.environ.get("EMAIL", "")
-PWSSD = os.environ.get("PWSSD", "")
-GDRIVE_FOLDER_ID = os.environ.get("GDRIVE_FOLDER_ID", "")
-CRYPT = os.environ.get("CRYPT", "")
-HUB_CRYPT = os.environ.get("HUB_CRYPT", "")
-DRIVEFIRE_CRYPT = os.environ.get("DRIVEFIRE_CRYPT", "")
-KATDRIVE_CRYPT = os.environ.get("KATDRIVE_CRYPT", "")
-KOLOP_CRYPT = os.environ.get("KOLOP_CRYPT", "")
-DRIVEBUZZ_CRYPT = os.environ.get("DRIVEBUZZ_CRYPT", "")
-GADRIVE_CRYPT = os.environ.get("GADRIVE_CRYPT", "")
-STRING_SESSION = os.environ.get("STRING_SESSION", "")
+UPTOBOX_TOKEN = getVar("UPTOBOX_TOKEN", "")
+EMAIL = getVar("EMAIL", "")
+PWSSD = getVar("PWSSD", "")
+GDRIVE_FOLDER_ID = getVar("GDRIVE_FOLDER_ID", "")
+CRYPT = getVar("CRYPT", "")
+HUB_CRYPT = getVar("HUB_CRYPT", "")
+DRIVEFIRE_CRYPT = getVar("DRIVEFIRE_CRYPT", "")
+KATDRIVE_CRYPT = getVar("KATDRIVE_CRYPT", "")
+KOLOP_CRYPT = getVar("KOLOP_CRYPT", "")
+DRIVEBUZZ_CRYPT = getVar("DRIVEBUZZ_CRYPT", "")
+GADRIVE_CRYPT = getVar("GADRIVE_CRYPT", "")
+STRING_SESSION = getVar("STRING_SESSION", "")
 
 #Bot Command [IMDB]  >>>>>>>>>>>
-CUSTOM_CAPTION = os.environ.get("CUSTOM_CAPTION", "")
-MAX_LIST_ELM = os.environ.get("MAX_LIST_ELM", None)
-DEF_IMDB_TEMPLATE = os.environ.get("IMDB_TEMPLATE", "")
+CUSTOM_CAPTION = getVar("CUSTOM_CAPTION", "")
+MAX_LIST_ELM = getVar("MAX_LIST_ELM", 4)
+DEF_IMDB_TEMPLATE = getVar("IMDB_TEMPLATE", '''<b>Title: </b> {title} [{year}]
+<b>Also Known As:</b> {aka}
+<b>Rating ⭐️:</b> <i>{rating}</i>
+<b>Release Info: </b> <a href="{url_releaseinfo}">{release_date}</a>
+<b>Genre: </b>{genres}
+<b>IMDb URL:</b> {url}
+<b>Language: </b>{languages}
+<b>Country of Origin : </b> {countries}
+
+<b>Story Line: </b><code>{plot}</code>
+
+<a href="{url_cast}">Read More ...</a>''')
+DEF_ANILIST_TEMPLATE = getVar("ANILIST_TEMPLATE", """<b>{ro_title}</b>({na_title})
+<b>Format</b>: <code>{format}</code>
+<b>Status</b>: <code>{status}</code>
+<b>Start Date</b>: <code>{startdate}</code>
+<b>End Date</b>: <code>{enddate}</code>
+<b>Season</b>: <code>{season}</code>
+<b>Country</b>: {country}
+<b>Episodes</b>: <code>{episodes}</code>
+<b>Duration</b>: <code>{duration}</code>
+<b>Average Score</b>: <code>{avgscore}</code>
+<b>Genres</b>: {genres}
+<b>Hashtag</b>: {hashtag}
+<b>Studios</b>: {studios}
+<b>Description</b>: <i>{description}</i>""")
 
 #Telegraph Creds  >>>>>>>>>>>
-TGH_AUTHOR = os.environ.get("TGH_AUTHOR ", "Tele-LeechX")
-TGH_AUTHOR_URL = os.environ.get("TGH_AUTHOR_URL", "https://t.me/FXTorrentz")
+TGH_AUTHOR = getVar("TGH_AUTHOR ", "Tele-LeechX")
+TGH_AUTHOR_URL = getVar("TGH_AUTHOR_URL", "https://t.me/FXTorrentz")
 
 #Bot Command [Bot PM & Log Channel]  >>>>>>>>>>>
-LEECH_LOG = os.environ.get("LEECH_LOG", "")
-EX_LEECH_LOG = os.environ.get("EX_LEECH_LOG", "")
-EXCEP_CHATS = os.environ.get("EXCEP_CHATS", "")
-BOT_PM = os.environ.get("BOT_PM", False)
-SERVER_HOST = os.environ.get("SERVER_HOST", "Heroku")
+LEECH_LOG = getVar("LEECH_LOG", "")
+LEECH_INVITE = getVar("LEECH_INVITE", "False")
+EX_LEECH_LOG = [int(chats) if (' ' not in getVar('EX_LEECH_LOG', '')) else int(chats) for chats in getVar('EX_LEECH_LOG', '').split()]
+EXCEP_CHATS = getVar("EXCEP_CHATS", "")
+BOT_PM = getVar("BOT_PM", False)
 
 # 4 GB Upload Utils >>>>>>>>>>>
-PRM_USERS = os.environ.get("PRM_USERS", "") #Optional 
-PRM_LOG = os.environ.get("PRM_LOG", "") #Optional 
+PRM_USERS = getVar("PRM_USERS", "") #Optional 
+PRM_LOG = getVar("PRM_LOG", "") #Optional 
 
 # Bot Theme [ UI & Customization ] >>>>>>>>
-BOT_THEME = os.environ.get("BOT_THEME", "fx-optimised")
+BOT_THEME = getVar("BOT_THEME", "fx-optimised-theme")
 
 # ForceSubscribe [ Channel ] >>>>>>>>
-FSUB_CHANNEL = os.environ.get("FSUB_CHANNEL", "") #Do Not Put this Now
+FSUB_CHANNEL = getVar("FSUB_CHANNEL", "") #Do Not Put this Now
 
 # Quotes in Restart Message >>>>>>>>
-RDM_QUOTE = os.environ.get("RDM_QUOTE", True)
+RDM_QUOTE = getVar("RDM_QUOTE", True)
 
-BOT_START_TIME = time.time()
+# Database Handler >>>>>>>>
+DB_URI = getVar("DATABASE_URL", "")
+
+BOT_START_TIME = time()
 
 gDict = defaultdict(lambda: [])
 user_settings = defaultdict(lambda: {})
 gid_dict = defaultdict(lambda: [])
-_lock = asyncio.Lock()
+_lock = Lock()
+user_settings_lock = ThreadLock()
 
 # Rclone Config Via Raw Gist URL & BackUp >>>>>>>>
 try:                                                                      
-    RCLONE_CONF_URL = os.environ.get('RCLONE_CONF_URL', "")              
+    RCLONE_CONF_URL = getVar('RCLONE_CONF_URL', "")              
     if len(RCLONE_CONF_URL) == 0:                                        
         RCLONE_CONF_URL = None                                           
     else:                                                                
-        urllib.request.urlretrieve(RCLONE_CONF_URL, '/app/rclone.conf')
+        urlretrieve(RCLONE_CONF_URL, '/app/rclone.conf')
         LOGGER.info("[SUCCESS] RClone Setup Complete via URL")
 except KeyError:                                                       
     RCLONE_CONF_URL = None                                              
 
 # Rclone Config via Root Directory & BackUp >>>>>>>>
-if not os.path.exists("rclone.conf"):
+if not opath.exists("rclone.conf"):
     LOGGER.warning("[NOT FOUND] rclone.conf not found in Root Directory .")
-if os.path.exists("rclone.conf") and not os.path.exists("rclone_bak.conf"):
+if opath.exists("rclone.conf") and not opath.exists("rclone_bak.conf"):
     with open("rclone_bak.conf", "w+", newline="\n", encoding="utf-8") as fole:
         with open("rclone.conf", "r") as f:
             fole.write(f.read())
     LOGGER.info("[SUCCESS] rclone.conf BackUped to rclone_bak.conf!")
 
 # Pyrogram Client Intialization >>>>>>>>>>>
-app = Client("LeechBot", bot_token=TG_BOT_TOKEN, api_id=APP_ID, api_hash=API_HASH, workers=343)
+app = [ 
+    Client("LeechBot", bot_token=TG_BOT_TOKEN[0], api_id=APP_ID[0], api_hash=API_HASH[0], workers=343), 
+]
+for i in range(1, len(TG_BOT_TOKEN)):
+    app.append(Client(f"LeechBot-{i}", bot_token=TG_BOT_TOKEN[i], api_id=APP_ID[i], api_hash=API_HASH[i], workers=343))
+if len(app) > 1:
+    LOGGER.info(f"[Multi Client Initiated] Total Bots : {len(app)}")
 isUserPremium = False
 if len(STRING_SESSION) > 10:
     if userBot := Client(
         "Tele-UserBot",
-        api_id=APP_ID,
-        api_hash=API_HASH,
+        api_id=APP_ID[0],
+        api_hash=API_HASH[0],
         session_string=STRING_SESSION,
     ):
         userBot.start()
@@ -269,8 +323,6 @@ if len(STRING_SESSION) > 10:
             LOGGER.info("[SUCCESS] Initiated UserBot : Non-Premium Mode. Add Premium Account StringSession to Use 4GB Upload. ")
     else:
         LOGGER.warning("[FAILED] Userbot Not Started. ReCheck Your STRING_SESSION, and Other Vars")
-else: LOGGER.info("Provide or ReGenerate Your STRING_SESSION Var")
 
-updater = tg.Updater(token=TG_BOT_TOKEN)
+updater = Updater(token=TG_BOT_TOKEN[0])
 bot = updater.bot
-dispatcher = updater.dispatcher
